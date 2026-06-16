@@ -63,7 +63,7 @@ async def collect_reviewed_prs(
     scanned = 0
 
     for pr in pulls:
-        if scanned >= max_prs * 5:  # Scan up to 5x to find enough
+        if scanned >= max_prs * 20:  # Scan up to 20x to find enough
             break
         scanned += 1
 
