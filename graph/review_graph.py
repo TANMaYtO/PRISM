@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import logging
 import operator
-from typing import Annotated, Any
+from typing import Annotated, Any, AsyncGenerator, TypedDict
 
 from langgraph.graph import END, StateGraph
 
@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 # Using TypedDict with Annotated reducers for list-merge semantics.
 
 
-class ReviewState(dict):
+class ReviewState(TypedDict, total=False):
     """Shared state flowing through the PRISM review graph.
 
     Keys populated at each stage:
@@ -44,25 +44,19 @@ class ReviewState(dict):
     - synthesizer      → final_review
     """
 
-    pass
-
-
-# We annotate list-valued finding keys with the `operator.add` reducer
-# so that parallel agent outputs merge rather than overwrite.
-_STATE_ANNOTATIONS: dict[str, Any] = {
-    "repo_owner": str,
-    "repo_name": str,
-    "pr_number": int,
-    "pr_data": Any,
-    "diff_files": list,
-    "retriever": Any,
-    "clone_dir": str,
-    "bug_findings": Annotated[list, operator.add],
-    "security_findings": Annotated[list, operator.add],
-    "logic_findings": Annotated[list, operator.add],
-    "style_findings": Annotated[list, operator.add],
-    "final_review": Any,
-}
+    repo_owner: str
+    repo_name: str
+    pr_number: int
+    pr_data: Any
+    diff_files: list
+    retriever: Any
+    clone_dir: str
+    code_graph: Any
+    bug_findings: Annotated[list, operator.add]
+    security_findings: Annotated[list, operator.add]
+    logic_findings: Annotated[list, operator.add]
+    style_findings: Annotated[list, operator.add]
+    final_review: Any
 
 
 # ── Graph builder ────────────────────────────────────────────────────
@@ -75,7 +69,7 @@ def build_review_graph() -> Any:
     with an initial state containing ``repo_owner``, ``repo_name``, and
     ``pr_number``.
     """
-    graph = StateGraph(dict)
+    graph = StateGraph(ReviewState)
 
     # ── Register nodes ───────────────────────────────────────────
     graph.add_node("fetch_pr", run_pr_fetcher)
@@ -97,10 +91,10 @@ def build_review_graph() -> Any:
     graph.add_edge("build_rag", "style_checker")
 
     # ── Fan-in: 4 review agents → synthesizer ────────────────────
-    graph.add_edge("bug_detector", "synthesizer")
-    graph.add_edge("security_scanner", "synthesizer")
-    graph.add_edge("logic_auditor", "synthesizer")
-    graph.add_edge("style_checker", "synthesizer")
+    graph.add_edge(
+        ["bug_detector", "security_scanner", "logic_auditor", "style_checker"],
+        "synthesizer",
+    )
 
     # ── Terminal ─────────────────────────────────────────────────
     graph.add_edge("synthesizer", END)
@@ -142,3 +136,87 @@ async def run_review(
 
     result = await graph.ainvoke(initial_state)
     return result
+
+
+async def run_review_stream(
+    repo_owner: str,
+    repo_name: str,
+    pr_number: int,
+) -> AsyncGenerator[dict[str, Any], None]:
+    """Execute the review pipeline and stream events in real-time."""
+    graph = build_review_graph()
+    initial_state: dict[str, Any] = {
+        "repo_owner": repo_owner,
+        "repo_name": repo_name,
+        "pr_number": pr_number,
+        "bug_findings": [],
+        "security_findings": [],
+        "logic_findings": [],
+        "style_findings": [],
+    }
+
+    logger.info(
+        "Starting PRISM review stream for %s/%s#%d", repo_owner, repo_name, pr_number
+    )
+
+    try:
+        async for event in graph.astream_events(initial_state, version="v2"):
+            kind = event["event"]
+            name = event.get("name", "")
+
+            if kind == "on_chain_start":
+                if name == "fetch_pr":
+                    yield {
+                        "event": "status",
+                        "data": f"Fetching PR #{pr_number} from {repo_owner}/{repo_name}...",
+                    }
+                elif name == "build_rag":
+                    yield {
+                        "event": "status",
+                        "data": "Building code knowledge graph and FAISS index...",
+                    }
+                elif name in (
+                    "bug_detector",
+                    "security_scanner",
+                    "logic_auditor",
+                    "style_checker",
+                ):
+                    # display name maps e.g. bug_detector -> Bug Detector
+                    display_name = name.replace("_", " ").title()
+                    yield {"event": "status", "data": f"Running {display_name}..."}
+
+            elif kind == "on_chain_end":
+                if name in (
+                    "bug_detector",
+                    "security_scanner",
+                    "logic_auditor",
+                    "style_checker",
+                ):
+                    # Agent finished, extract findings
+                    output_state = event.get("data", {}).get("output")
+                    if output_state:
+                        findings_key = f"{name.split('_')[0]}_findings"
+                        findings = output_state.get(findings_key, [])
+                        for f in findings:
+                            yield {"event": "finding", "data": f}
+
+                        yield {
+                            "event": "agent_done",
+                            "data": {
+                                "agent": name,
+                                "count": len(findings),
+                            },
+                        }
+
+                elif name == "synthesizer":
+                    output_state = event.get("data", {}).get("output")
+                    if output_state and "final_review" in output_state:
+                        final_review = output_state["final_review"]
+                        yield {
+                            "event": "complete",
+                            "data": final_review.model_dump_json(),
+                        }
+
+    except Exception as exc:
+        logger.exception("Error in review stream")
+        yield {"event": "error", "data": str(exc)}

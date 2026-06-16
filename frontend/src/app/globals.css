@@ -1,0 +1,41 @@
+@import "tailwindcss";
+@config "../../tailwind.config.ts";
+
+@theme {
+  --color-void: #08080E;
+  --color-surface: #0F0F18;
+  --color-overlay: #14141F;
+  --color-line: #1C1C2E;
+  --color-line-bright: #2E2E4A;
+  --color-primary: #E2E2F0;
+  --color-muted: #5A5A7A;
+  --color-dim: #2E2E4A;
+  --color-prism: #4F7FFF;
+  --color-critical: #FF2D55;
+  --color-high: #FF9500;
+  --color-medium: #FFD60A;
+  --color-low: #32D74B;
+  --color-suggest: #48484A;
+}
+
+@layer base {
+  :root {
+    --display: var(--font-space-mono);
+    --heading: var(--font-space-mono);
+    --body: var(--font-geist);
+    --label: var(--font-geist);
+    --code: var(--font-geist-mono);
+    --finding-msg: var(--font-geist);
+  }
+
+  body {
+    background-color: var(--color-void);
+    color: var(--color-primary);
+    font-family: var(--body);
+  }
+
+  * {
+    border-color: var(--color-line);
+    box-sizing: border-box;
+  }
+}

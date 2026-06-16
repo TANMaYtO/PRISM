@@ -1,8 +1,9 @@
 """Logic Auditor agent — evaluates algorithmic correctness.
 
 Analyses diffs for complexity regressions, incorrect boundary conditions,
-broken invariants, missing edge cases, and algorithmic issues.  Uses RAG
-to retrieve related code for cross-file analysis.
+broken invariants, missing edge cases, and algorithmic issues.  Uses the
+HybridCodeRetriever for per-file structural + semantic context including
+call-graph analysis via CodeGraph.
 """
 
 from __future__ import annotations
@@ -11,7 +12,6 @@ import json
 import logging
 from typing import Any
 
-from langchain_core.documents import Document
 from langchain_google_genai import ChatGoogleGenerativeAI
 
 from config import GEMINI_API_KEY, MAX_CONTEXT_TOKENS, MODEL_NAME
@@ -49,20 +49,25 @@ Respond ONLY with a valid JSON array — no markdown fences, no commentary.
 """
 
 
-def _build_prompt(diff: str, context_docs: list[Document]) -> str:
-    """Compose the user prompt from diff and RAG context."""
-    context_text = "\n\n".join(
-        f"--- {doc.metadata.get('source', 'unknown')} ---\n{doc.page_content}"
-        for doc in context_docs
-    )
-    return (
-        f"## Pull Request Diff\n\n```diff\n{diff}\n```\n\n"
-        f"## Related Codebase Context\n\n{context_text}"
-    )
+def _build_prompt(diff: str, context: str) -> str:
+    """Compose the user prompt from diff and retriever context."""
+    sections = f"## Pull Request Diff\n\n```diff\n{diff}\n```"
+    if context:
+        sections += f"\n\n## Related Codebase Context\n\n{context}"
+    return sections
 
 
-def _parse_findings(raw: str, agent_source: str) -> list[dict[str, Any]]:
+def _parse_findings(raw: Any, agent_source: str) -> list[dict[str, Any]]:
     """Parse LLM output into a list of finding dicts."""
+    if isinstance(raw, list):
+        if raw and isinstance(raw[0], dict) and "text" in raw[0]:
+            raw = raw[0]["text"]
+        else:
+            raw = str(raw)
+    
+    if not isinstance(raw, str):
+        raw = str(raw)
+
     cleaned = raw.strip()
     if cleaned.startswith("```"):
         cleaned = cleaned.split("\n", 1)[-1].rsplit("```", 1)[0]
@@ -70,7 +75,9 @@ def _parse_findings(raw: str, agent_source: str) -> list[dict[str, Any]]:
     try:
         findings = json.loads(cleaned)
     except json.JSONDecodeError:
-        logger.warning("Logic auditor returned invalid JSON: %s…", cleaned[:200])
+        logger.warning(
+            "Logic auditor returned invalid JSON: %s…", cleaned[:200]
+        )
         return []
 
     if not isinstance(findings, list):
@@ -83,7 +90,7 @@ def _parse_findings(raw: str, agent_source: str) -> list[dict[str, Any]]:
 
 
 async def run_logic_auditor(state: dict[str, Any]) -> dict[str, Any]:
-    """Audit the PR diff for algorithmic correctness issues.
+    """Audit the PR diff for algorithmic correctness, one file at a time.
 
     Reads ``pr_data`` and ``retriever`` from state.
     Returns a partial state update with ``logic_findings``.
@@ -98,41 +105,22 @@ async def run_logic_auditor(state: dict[str, Any]) -> dict[str, Any]:
         max_output_tokens=MAX_CONTEXT_TOKENS,
     )
 
-    # Retrieve context specifically around changed functions / classes
-    context_docs: list[Document] = []
-    if retriever:
-        for diff_file in pr_data.diff_files:
-            # Extract function/class names from added lines for targeted retrieval
-            added_identifiers: list[str] = []
-            for hunk in diff_file.hunks:
-                for line in hunk.added_lines:
-                    stripped = line.strip()
-                    if stripped.startswith(("def ", "class ", "function ", "func ")):
-                        name = stripped.split("(")[0].split()[-1]
-                        added_identifiers.append(name)
+    all_findings: list[dict[str, Any]] = []
 
-            if added_identifiers:
-                query = (
-                    f"Functions and classes: {', '.join(added_identifiers)} "
-                    f"in {diff_file.filename}"
-                )
-            else:
-                query = f"Logic and algorithms in {diff_file.filename}"
-            docs = await retriever.ainvoke(query)
-            context_docs.extend(docs)
+    combined_prompts = []
+    for diff_file in pr_data.diff_files:
+        if not diff_file.patch:
+            continue
+        context_str = ""
+        if retriever and hasattr(retriever, "get_context"):
+            context_str = await retriever.get_context(diff_file)
+        
+        combined_prompts.append(f"""### File: {diff_file.filename}\n\n```diff\n{diff_file.patch}\n```\n\nContext:\n{context_str}""")
 
-    # Deduplicate
-    seen_sources: set[str] = set()
-    unique_docs: list[Document] = []
-    for doc in context_docs:
-        source = doc.metadata.get("source", "")
-        if source not in seen_sources:
-            seen_sources.add(source)
-            unique_docs.append(doc)
+    if not combined_prompts:
+        return {"logic_findings": []}
 
-    prompt = _build_prompt(pr_data.raw_diff, unique_docs[:15])
-
-    logger.info("Running logic audit on %d files", len(pr_data.diff_files))
+    prompt = "## Pull Request Diffs\n\n" + "\n\n".join(combined_prompts)
 
     response = await llm.ainvoke(
         [
@@ -142,6 +130,11 @@ async def run_logic_auditor(state: dict[str, Any]) -> dict[str, Any]:
     )
 
     findings = _parse_findings(response.content, "logic_auditor")
-    logger.info("Logic auditor found %d issues", len(findings))
+    all_findings.extend(findings)
 
-    return {"logic_findings": findings}
+    logger.info(
+        "Logic Auditor found %d issues across %d files",
+        len(all_findings),
+        len(pr_data.diff_files),
+    )
+    return {"logic_findings": all_findings}

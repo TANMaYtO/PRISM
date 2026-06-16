@@ -2,15 +2,17 @@
 
 Checks naming conventions, docstring presence, import ordering, dead code,
 type hint coverage, and magic numbers.  Language-aware via file extension.
+Processes files one at a time with targeted structural + semantic context
+from HybridCodeRetriever.
 """
 
 from __future__ import annotations
 
 import json
 import logging
+from pathlib import PurePosixPath
 from typing import Any
 
-from langchain_core.documents import Document
 from langchain_google_genai import ChatGoogleGenerativeAI
 
 from config import GEMINI_API_KEY, MAX_CONTEXT_TOKENS, MODEL_NAME
@@ -70,29 +72,48 @@ Respond ONLY with a valid JSON array — no markdown fences, no commentary.
 
 def _detect_languages(diff_files: list[Any]) -> str:
     """Build a summary of detected languages and their conventions."""
-    extensions = {f.filename.rsplit(".", 1)[-1] for f in diff_files if "." in f.filename}
+    extensions = {
+        f.filename.rsplit(".", 1)[-1]
+        for f in diff_files
+        if "." in f.filename
+    }
     conventions: list[str] = []
     for ext in sorted(extensions):
         dotted = f".{ext}"
         if dotted in _LANGUAGE_MAP:
             conventions.append(f"- `{dotted}`: {_LANGUAGE_MAP[dotted]}")
-    return "\n".join(conventions) if conventions else "- General best practices"
-
-
-def _build_prompt(diff: str, context_docs: list[Document]) -> str:
-    """Compose the user prompt from diff and RAG context."""
-    context_text = "\n\n".join(
-        f"--- {doc.metadata.get('source', 'unknown')} ---\n{doc.page_content}"
-        for doc in context_docs
-    )
     return (
-        f"## Pull Request Diff\n\n```diff\n{diff}\n```\n\n"
-        f"## Existing Codebase Style Reference\n\n{context_text}"
+        "\n".join(conventions) if conventions else "- General best practices"
     )
 
 
-def _parse_findings(raw: str, agent_source: str) -> list[dict[str, Any]]:
+def _detect_language_for_file(filename: str) -> str:
+    """Get the language convention string for a single file."""
+    suffix = PurePosixPath(filename).suffix
+    return _LANGUAGE_MAP.get(suffix, "General best practices")
+
+
+def _build_prompt(diff: str, context: str) -> str:
+    """Compose the user prompt from diff and retriever context."""
+    sections = f"## Pull Request Diff\n\n```diff\n{diff}\n```"
+    if context:
+        sections += (
+            f"\n\n## Existing Codebase Style Reference\n\n{context}"
+        )
+    return sections
+
+
+def _parse_findings(raw: Any, agent_source: str) -> list[dict[str, Any]]:
     """Parse LLM output into a list of finding dicts."""
+    if isinstance(raw, list):
+        if raw and isinstance(raw[0], dict) and "text" in raw[0]:
+            raw = raw[0]["text"]
+        else:
+            raw = str(raw)
+    
+    if not isinstance(raw, str):
+        raw = str(raw)
+
     cleaned = raw.strip()
     if cleaned.startswith("```"):
         cleaned = cleaned.split("\n", 1)[-1].rsplit("```", 1)[0]
@@ -100,7 +121,9 @@ def _parse_findings(raw: str, agent_source: str) -> list[dict[str, Any]]:
     try:
         findings = json.loads(cleaned)
     except json.JSONDecodeError:
-        logger.warning("Style checker returned invalid JSON: %s…", cleaned[:200])
+        logger.warning(
+            "Style checker returned invalid JSON: %s…", cleaned[:200]
+        )
         return []
 
     if not isinstance(findings, list):
@@ -113,7 +136,7 @@ def _parse_findings(raw: str, agent_source: str) -> list[dict[str, Any]]:
 
 
 async def run_style_checker(state: dict[str, Any]) -> dict[str, Any]:
-    """Check the PR diff for code style and convention violations.
+    """Check the PR diff for style violations, one file at a time.
 
     Reads ``pr_data`` and ``retriever`` from state.
     Returns a partial state update with ``style_findings``.
@@ -121,6 +144,7 @@ async def run_style_checker(state: dict[str, Any]) -> dict[str, Any]:
     pr_data = state["pr_data"]
     retriever = state.get("retriever")
 
+    # Build system prompt with all detected languages
     language_conventions = _detect_languages(pr_data.diff_files)
     system_prompt = _SYSTEM_PROMPT.format(
         language_conventions=language_conventions
@@ -133,38 +157,36 @@ async def run_style_checker(state: dict[str, Any]) -> dict[str, Any]:
         max_output_tokens=MAX_CONTEXT_TOKENS,
     )
 
-    # Retrieve context to understand existing code style
-    context_docs: list[Document] = []
-    if retriever:
-        style_queries = [
-            "coding style conventions imports docstrings",
-            "function definitions class definitions naming",
-        ]
-        for query in style_queries:
-            docs = await retriever.ainvoke(query)
-            context_docs.extend(docs)
+    all_findings: list[dict[str, Any]] = []
 
-    # Deduplicate
-    seen_sources: set[str] = set()
-    unique_docs: list[Document] = []
-    for doc in context_docs:
-        source = doc.metadata.get("source", "")
-        if source not in seen_sources:
-            seen_sources.add(source)
-            unique_docs.append(doc)
+    combined_prompts = []
+    for diff_file in pr_data.diff_files:
+        if not diff_file.patch:
+            continue
+        context_str = ""
+        if retriever and hasattr(retriever, "get_context"):
+            context_str = await retriever.get_context(diff_file)
+        
+        combined_prompts.append(f"""### File: {diff_file.filename}\n\n```diff\n{diff_file.patch}\n```\n\nContext:\n{context_str}""")
 
-    prompt = _build_prompt(pr_data.raw_diff, unique_docs[:10])
+    if not combined_prompts:
+        return {"style_findings": []}
 
-    logger.info("Running style check on %d files", len(pr_data.diff_files))
+    prompt = "## Pull Request Diffs\n\n" + "\n\n".join(combined_prompts)
 
     response = await llm.ainvoke(
         [
-            {"role": "system", "content": system_prompt},
+            {"role": "system", "content": _SYSTEM_PROMPT},
             {"role": "user", "content": prompt},
         ]
     )
 
     findings = _parse_findings(response.content, "style_checker")
-    logger.info("Style checker found %d issues", len(findings))
+    all_findings.extend(findings)
 
-    return {"style_findings": findings}
+    logger.info(
+        "Style Checker found %d issues across %d files",
+        len(all_findings),
+        len(pr_data.diff_files),
+    )
+    return {"style_findings": all_findings}

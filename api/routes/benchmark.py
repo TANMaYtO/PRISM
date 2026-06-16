@@ -9,10 +9,13 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
+from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, status
 
 from api.models import BenchmarkRunRequest, BenchmarkSummary
+from api.db.client import get_client
+from api.db.persistence import save_benchmark
 from config import BENCHMARK_RESULTS_DIR
 
 logger = logging.getLogger(__name__)
@@ -55,7 +58,10 @@ async def _run_benchmark_task(max_prs: int, repo: str) -> None:
         )
         logger.info("Collected %d PRs with human reviews", len(prs))
 
-        await evaluate_prism(prs)
+        summary = await evaluate_prism(prs)
+        logger.info("Saving benchmark summary to Supabase")
+        await save_benchmark(summary)
+        
         logger.info("Benchmark run completed")
 
     except Exception:
@@ -70,6 +76,21 @@ async def _run_benchmark_task(max_prs: int, repo: str) -> None:
 )
 async def get_benchmark() -> BenchmarkSummary:
     """Return the latest stored benchmark results."""
+    try:
+        client = await get_client()
+        result = (
+            await client.table("benchmarks")
+            .select("*")
+            .order("created_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        if result.data and len(result.data) > 0:
+            return BenchmarkSummary(**result.data[0]["summary_data"])
+    except Exception as exc:
+        logger.error("Failed to load benchmark from Supabase: %s", exc)
+
+    logger.info("Falling back to local disk for benchmark results")
     results = _load_latest_results()
     if results is None:
         raise HTTPException(

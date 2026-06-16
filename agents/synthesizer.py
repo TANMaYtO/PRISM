@@ -213,7 +213,15 @@ async def run_synthesizer(state: dict[str, Any]) -> dict[str, Any]:
     response = await llm.ainvoke(
         [{"role": "user", "content": prompt}]
     )
-    summary = response.content.strip()
+    raw = response.content
+    if isinstance(raw, list):
+        if raw and isinstance(raw[0], dict) and "text" in raw[0]:
+            raw = raw[0]["text"]
+        else:
+            raw = str(raw)
+    if not isinstance(raw, str):
+        raw = str(raw)
+    summary = raw.strip()
 
     # Compose final response
     review = PRReviewResponse(

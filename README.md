@@ -1,137 +1,69 @@
-# 🔷 PRISM — Autonomous GitHub PR Review System
+# PRISM
 
-> **Current Status**: 🟢 Alpha / Core Implementation Complete
+PRISM is an autonomous pull-request intelligence platform that leverages multi-agent architecture to perform comprehensive code reviews. By combining static analysis, semantic retrieval-augmented generation (RAG), and specialized agents, PRISM aims to detect logic flaws, security vulnerabilities, and style inconsistencies with high precision.
 
-PRISM is a multi-agent code review system powered by **LangGraph**, **Gemini 1.5 Pro**, and **FAISS** vector search. It automatically fetches a GitHub pull request, builds a RAG index of the repository, and dispatches four specialised review agents **in parallel**—each analysing the diff through a different lens. A synthesiser agent deduplicates, ranks, and summarises the findings into a single actionable review.
+## Architecture
 
----
+PRISM is built upon a parallel multi-agent graph architecture powered by LangGraph and FastAPI. It orchestrates the following components:
 
-## 📊 Current Project Status
+- **PR Fetcher**: Interacts with the GitHub API to fetch pull request metadata and code diffs.
+- **Repo RAG Engine**: Clones the target repository, builds a semantic FAISS index of the codebase, and provides deep contextual awareness for the agents.
+- **Specialized Review Agents**: Four independent agents execute in parallel:
+  - **Bug Detector**: Analyzes code for logical errors and state management flaws.
+  - **Security Scanner**: Identifies vulnerabilities, hardcoded secrets, and unsafe patterns.
+  - **Logic Auditor**: Verifies architectural integrity and business logic correctness.
+  - **Style Checker**: Enforces best practices and consistent coding conventions.
+- **Synthesizer**: Aggregates, deduplicates, and assigns an overall risk rating based on the parallel findings.
 
-The foundational architecture and all 25 core files have been fully implemented.
+## Benchmark Suite
 
-### ✅ What is Working
-- **LangGraph Orchestration**: The `StateGraph` successfully fans out to four parallel agents and fans back into the synthesizer.
-- **RAG Implementation**: `RepoRAG` agent successfully shallow-clones the target repo, chunks the codebase, and creates a FAISS vector index.
-- **Specialised Agents**:
-  - `Bug Detector`: Checks for logic flaws and memory/resource issues.
-  - `Security Scanner`: Uses the OWASP Top 10 framework for vulnerability detection.
-  - `Logic Auditor`: Assesses algorithmic correctness and boundary conditions.
-  - `Style Checker`: Evaluates codebase conventions across 11+ languages.
-- **Synthesiser**: Deduplicates overlapping findings and computes severity statistics.
-- **FastAPI Backend**: `POST /review` and `GET /benchmark` endpoints are fully operational.
-- **Benchmarking Suite**: Capable of scraping merged PRs with human reviews and evaluating PRISM's F1, Precision, and Recall scores.
+PRISM includes an automated benchmarking suite to evaluate its performance against human reviewers. The benchmark framework pulls historical pull requests, executes the PRISM pipeline, and compares the AI-generated findings with merged human comments to compute Precision, Recall, and F1-Scores.
 
-### 🚧 What Remains / Next Steps
-- **Integration Testing**: End-to-end testing with live GitHub PRs to ensure rate limits and context windows hold up under load.
-- **Prompt Tuning**: Iteratively tuning the agent prompts based on the benchmark results.
-- **GitHub App Integration**: Converting from a script-based personal access token system to a native GitHub App installation (listening for webhooks).
-- **Frontend / Dashboard**: Adding a web UI (or Supabase integration) to persist and view past reviews.
-- **CI/CD**: Setting up automated workflows to build and publish the Docker container.
+## Local Setup
 
----
+### Prerequisites
+- Python 3.10+
+- Node.js 18+
+- Supabase instance
 
-## 🏗 Architecture
+### Backend Installation
 
-```mermaid
-graph TD
-    A["POST /review"] --> B["PR Fetcher<br/>(PyGithub)"]
-    B --> C["Repo RAG Builder<br/>(GitPython + FAISS)"]
-    C --> D{"Parallel Fan-Out"}
-    D --> E["🐛 Bug Detector"]
-    D --> F["🔒 Security Scanner"]
-    D --> G["🧠 Logic Auditor"]
-    D --> H["🎨 Style Checker"]
-    E --> I["Synthesiser"]
-    F --> I
-    G --> I
-    H --> I
-    I --> J["PRReviewResponse"]
-```
+1. Navigate to the backend directory and set up a virtual environment:
+   ```bash
+   python -m venv .venv
+   source .venv/bin/activate
+   pip install -r requirements.txt
+   ```
 
----
+2. Create a `.env` file based on `.env.example` and populate it with your credentials:
+   - `GEMINI_API_KEY`
+   - `GITHUB_TOKEN`
+   - `SUPABASE_URL`
+   - `SUPABASE_KEY`
 
-## 🚀 Quick Start
+3. Start the FastAPI server:
+   ```bash
+   uvicorn api.main:app --port 8000
+   ```
 
-### 1. Clone & Configure
+### Frontend Installation
 
+1. Navigate to the frontend directory:
+   ```bash
+   cd frontend
+   npm install
+   ```
+
+2. Start the Next.js development server:
+   ```bash
+   npm run dev
+   ```
+
+## Usage
+
+Once both servers are running, navigate to `http://localhost:3000` to submit a pull request for review. The backend utilizes Server-Sent Events (SSE) to stream the agents' progress and findings to the UI in real-time.
+
+To trigger the automated benchmark suite:
 ```bash
-git clone https://github.com/TANMaYtO/PRISM.git
-cd prism
-cp .env.example .env
-# Edit .env with your Google Gemini and GitHub API keys
+curl -X POST "http://127.0.0.1:8000/benchmark/run" -H "Content-Type: application/json" -d "{\"repo\": \"langchain-ai/langgraph\", \"max_prs\": 20}"
 ```
-
-### 2. Install Dependencies
-
-```bash
-python -m venv .venv
-# Windows:
-.venv\Scripts\activate
-# Mac/Linux:
-source .venv/bin/activate
-
-pip install -r requirements.txt
-```
-
-### 3. Run the Server
-
-```bash
-uvicorn api.main:app --reload --port 8000
-```
-
-### 4. Submit a Review
-
-```bash
-curl -X POST http://localhost:8000/review \
-  -H "Content-Type: application/json" \
-  -d '{
-    "repo_owner": "langchain-ai",
-    "repo_name": "langgraph",
-    "pr_number": 42
-  }'
-```
-
----
-
-## 🐳 Docker
-
-```bash
-docker build -t prism .
-docker run -p 8000:8000 --env-file .env prism
-```
-
----
-
-## 📈 Benchmark System
-
-PRISM includes a built-in benchmarking system that compares automated findings against human reviewer comments on real merged PRs.
-
-### Running a Benchmark
-
-```bash
-curl -X POST http://localhost:8000/benchmark/run \
-  -H "Content-Type: application/json" \
-  -d '{"max_prs": 10, "repo": "langchain-ai/langgraph"}'
-```
-
----
-
-## 🔑 Environment Variables
-
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `GEMINI_API_KEY` | ✅ | — | Google Gemini API key |
-| `GITHUB_TOKEN` | ✅ | — | GitHub personal access token |
-| `SUPABASE_URL` | ✅ | — | Supabase project URL |
-| `SUPABASE_KEY` | ✅ | — | Supabase anon/service key |
-| `MODEL_NAME` | ❌ | `gemini-1.5-pro` | Gemini model name |
-| `MAX_CONTEXT_TOKENS` | ❌ | `8000` | Max tokens for LLM context |
-| `CHUNK_SIZE` | ❌ | `500` | RAG chunk size (characters) |
-| `CHUNK_OVERLAP` | ❌ | `50` | RAG chunk overlap |
-
----
-
-## 📄 License
-
-MIT

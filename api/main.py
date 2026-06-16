@@ -12,8 +12,10 @@ from typing import AsyncGenerator
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from api.db.client import get_client
 from api.routes.benchmark import router as benchmark_router
 from api.routes.review import router as review_router
+from config import SUPABASE_URL
 
 # ── Logging ──────────────────────────────────────────────────────────
 
@@ -32,6 +34,13 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application startup / shutdown lifecycle."""
     logger.info("🔷 PRISM starting up …")
+    try:
+        await get_client()
+        logger.info(f"Connected to Supabase at {SUPABASE_URL}")
+    except Exception as e:
+        logger.error(f"Failed to initialize Supabase connection: {e}")
+        
+    logger.info("SSE streaming enabled on POST /review")
     yield
     logger.info("🔷 PRISM shutting down …")
 
