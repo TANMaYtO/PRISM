@@ -126,10 +126,13 @@ class HybridCodeRetriever:
     with embedding-based similarity search for rich review context.
     """
 
-    def __init__(self, repo_path: Path, clone_dir: Path) -> None:
+    def __init__(self, repo_path: Path, clone_dir: Path, owner: str, repo_name: str, branch: str) -> None:
         """Initialize with repo path for graph and FAISS building."""
         self.repo_path = repo_path
         self.clone_dir = clone_dir
+        self.owner = owner
+        self.repo_name = repo_name
+        self.branch = branch
         self.code_graph: CodeGraph = CodeGraph()
         self._vectorstore: FAISS | None = None
         self._chunk_sources: set[str] = set()
@@ -151,50 +154,65 @@ class HybridCodeRetriever:
 
         # Step 2: Semantic FAISS index
         t2 = time.perf_counter()
-        raw_docs = _collect_source_files(self.repo_path)
-        logger.info(
-            "Collected %d source files from repo", len(raw_docs)
-        )
-
-        splitter = RecursiveCharacterTextSplitter(
-            chunk_size=CHUNK_SIZE,
-            chunk_overlap=CHUNK_OVERLAP,
-            separators=["\nclass ", "\ndef ", "\n\n", "\n", " "],
-        )
-        chunks = splitter.split_documents(raw_docs)
-        logger.info(
-            "Split into %d chunks (size=%d, overlap=%d)",
-            len(chunks),
-            CHUNK_SIZE,
-            CHUNK_OVERLAP,
-        )
-
-        # Track chunk source paths for dedup during retrieval
-        self._chunk_sources = {
-            doc.metadata.get("source", "")
-            for doc in chunks
-        }
-
+        
         embeddings = GoogleGenerativeAIEmbeddings(
             model="models/gemini-embedding-2",
             google_api_key=GEMINI_API_KEY,
         )
 
-        if not chunks:
-            logger.warning(
-                "No source documents found — retriever will be empty"
-            )
-            self._vectorstore = FAISS.from_texts(
-                ["Empty repository — no source files found."],
-                embeddings,
-            )
+        cache_dir = Path(f".faiss_cache/{self.owner}_{self.repo_name}_{self.branch}")
+        
+        if cache_dir.exists():
+            logger.info("Loading cached FAISS index from %s", cache_dir)
+            self._vectorstore = FAISS.load_local(str(cache_dir), embeddings, allow_dangerous_deserialization=True)
+            self._chunk_sources = {
+                doc.metadata.get("source", "")
+                for doc in self._vectorstore.docstore._dict.values()
+            }
         else:
-            self._vectorstore = FAISS.from_documents(
-                chunks, embeddings
+            raw_docs = _collect_source_files(self.repo_path)
+            logger.info(
+                "Collected %d source files from repo", len(raw_docs)
             )
 
+            splitter = RecursiveCharacterTextSplitter(
+                chunk_size=CHUNK_SIZE,
+                chunk_overlap=CHUNK_OVERLAP,
+                separators=["\nclass ", "\ndef ", "\n\n", "\n", " "],
+            )
+            chunks = splitter.split_documents(raw_docs)
+            logger.info(
+                "Split into %d chunks (size=%d, overlap=%d)",
+                len(chunks),
+                CHUNK_SIZE,
+                CHUNK_OVERLAP,
+            )
+
+            self._chunk_sources = {
+                doc.metadata.get("source", "")
+                for doc in chunks
+            }
+
+            if not chunks:
+                logger.warning(
+                    "No source documents found — retriever will be empty"
+                )
+                self._vectorstore = FAISS.from_texts(
+                    ["Empty repository — no source files found."],
+                    embeddings,
+                )
+            else:
+                self._vectorstore = FAISS.from_documents(
+                    chunks, embeddings
+                )
+            
+            # Save the newly built index
+            cache_dir.parent.mkdir(parents=True, exist_ok=True)
+            self._vectorstore.save_local(str(cache_dir))
+            logger.info("Saved FAISS index to %s", cache_dir)
+
         t3 = time.perf_counter()
-        logger.info("FAISS index built in %.2fs", t3 - t2)
+        logger.info("FAISS index loaded/built in %.2fs", t3 - t2)
 
     async def get_context(self, changed_file: FileDiff) -> str:
         """Get combined structural + semantic context for one file.
@@ -360,7 +378,11 @@ async def run_repo_rag(state: dict[str, Any]) -> dict[str, Any]:
     clone_dir = _clone_repo(owner, repo_name, branch)
 
     hybrid = HybridCodeRetriever(
-        repo_path=clone_dir, clone_dir=clone_dir
+        repo_path=clone_dir, 
+        clone_dir=clone_dir,
+        owner=owner,
+        repo_name=repo_name,
+        branch=branch
     )
     await hybrid.build()
 
