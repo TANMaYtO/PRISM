@@ -178,9 +178,9 @@ async def evaluate_prism(
             logger.exception("Failed to evaluate PR #%d", number)
             continue
             
-        logger.info("Sleeping for 45s to respect API rate limits (10 RPM)...")
+        logger.info("Sleeping for 60s to completely avoid API rate limits/503s...")
         import asyncio
-        await asyncio.sleep(45)
+        await asyncio.sleep(60)
 
     # Compute aggregated metrics
     summary = BenchmarkSummary(
