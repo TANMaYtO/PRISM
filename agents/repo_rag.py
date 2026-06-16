@@ -48,13 +48,19 @@ def _collect_source_files(repo_path: Path) -> list[Document]:
             continue
         if file_path.suffix not in SUPPORTED_EXTENSIONS:
             continue
+        # Check path relative to repo root so we don't accidentally skip the clone dir itself
+        try:
+            relative = file_path.relative_to(repo_path)
+        except ValueError:
+            continue
+            
         # Skip hidden dirs (.git, .venv, etc.)
-        if any(part.startswith(".") for part in file_path.parts):
+        if any(part.startswith(".") for part in relative.parts):
             continue
         # Skip common non-source dirs
         if any(
             part in {"node_modules", "__pycache__", "venv", "dist", "build"}
-            for part in file_path.parts
+            for part in relative.parts
         ):
             continue
 
