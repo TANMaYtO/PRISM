@@ -33,6 +33,9 @@ share/python-wheels/
 # Temporary clones created by Repo RAG Agent
 .tmp_clones/
 
+# FAISS index cache (large binary files)
+.faiss_cache/
+
 # Benchmark results (ignoring JSONs but keeping .gitkeep)
 benchmark/results/*.json
 

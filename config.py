@@ -42,10 +42,12 @@ CHUNK_SIZE: int = int(os.getenv("CHUNK_SIZE", "500"))
 CHUNK_OVERLAP: int = int(os.getenv("CHUNK_OVERLAP", "50"))
 
 # ── Misc constants ───────────────────────────────────────────────────
-TEMP_CLONE_DIR: Path = Path(__file__).resolve().parent / ".tmp_clones"
-BENCHMARK_RESULTS_DIR: Path = (
-    Path(__file__).resolve().parent / "benchmark" / "results"
-)
+_PROJECT_ROOT: Path = Path(__file__).resolve().parent
+TEMP_CLONE_DIR: Path = _PROJECT_ROOT / ".tmp_clones"
+BENCHMARK_RESULTS_DIR: Path = _PROJECT_ROOT / "benchmark" / "results"
+FAISS_CACHE_DIR: Path = _PROJECT_ROOT / ".faiss_cache"
+EMBEDDING_BATCH_SIZE: int = int(os.getenv("EMBEDDING_BATCH_SIZE", "90"))
+EMBEDDING_BATCH_DELAY: float = float(os.getenv("EMBEDDING_BATCH_DELAY", "62.0"))
 SUPPORTED_EXTENSIONS: frozenset[str] = frozenset(
     {
         ".py", ".js", ".ts", ".jsx", ".tsx", ".go", ".rs",

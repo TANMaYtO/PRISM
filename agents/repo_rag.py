@@ -1,4 +1,4 @@
-"""Repo RAG agent — hybrid retrieval with CodeGraph + FAISS.
+"""Repo RAG agent -- hybrid retrieval with CodeGraph + FAISS.
 
 Clones the repository, builds a structural code graph via tree-sitter
 and a FAISS semantic index via Google Generative AI embeddings.
@@ -9,7 +9,9 @@ review context quality.
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import math
 import tempfile
 import time
 from pathlib import Path
@@ -26,6 +28,9 @@ from agents.pr_fetcher import FileDiff
 from config import (
     CHUNK_OVERLAP,
     CHUNK_SIZE,
+    EMBEDDING_BATCH_DELAY,
+    EMBEDDING_BATCH_SIZE,
+    FAISS_CACHE_DIR,
     GEMINI_API_KEY,
     GITHUB_TOKEN,
     MAX_CONTEXT_TOKENS,
@@ -53,7 +58,7 @@ def _collect_source_files(repo_path: Path) -> list[Document]:
             relative = file_path.relative_to(repo_path)
         except ValueError:
             continue
-            
+
         # Skip hidden dirs (.git, .venv, etc.)
         if any(part.startswith(".") for part in relative.parts):
             continue
@@ -111,12 +116,101 @@ def _clone_repo(owner: str, repo_name: str, branch: str) -> Path:
     return clone_dir
 
 
+# ── Rate-limited batch embedding ─────────────────────────────────────
+
+
+async def _embed_texts_with_rate_limit(
+    embeddings: GoogleGenerativeAIEmbeddings,
+    texts: list[str],
+    batch_size: int = EMBEDDING_BATCH_SIZE,
+    batch_delay: float = EMBEDDING_BATCH_DELAY,
+    max_retries: int = 5,
+) -> list[list[float]]:
+    """Embed texts in small batches with rate limiting and retry logic.
+
+    Respects the Gemini free-tier limit of 100 RPM by sending at most
+    ``batch_size`` texts per minute (default 90 to leave headroom).
+    On 429 errors, retries with exponential backoff.
+    """
+    all_embeddings: list[list[float]] = []
+    total_batches = math.ceil(len(texts) / batch_size)
+
+    logger.info(
+        "Embedding %d texts in %d batches (batch_size=%d, delay=%.0fs)",
+        len(texts),
+        total_batches,
+        batch_size,
+        batch_delay,
+    )
+
+    for i in range(0, len(texts), batch_size):
+        batch_num = (i // batch_size) + 1
+        batch = texts[i : i + batch_size]
+
+        for attempt in range(1, max_retries + 1):
+            try:
+                logger.info(
+                    "Embedding batch %d/%d (%d texts) — attempt %d",
+                    batch_num,
+                    total_batches,
+                    len(batch),
+                    attempt,
+                )
+                batch_result = embeddings.embed_documents(batch)
+                all_embeddings.extend(batch_result)
+                break
+            except Exception as exc:
+                exc_str = str(exc)
+                if "429" in exc_str or "RESOURCE_EXHAUSTED" in exc_str:
+                    wait_time = batch_delay * (2 ** (attempt - 1))
+                    logger.warning(
+                        "Rate limited on batch %d/%d (attempt %d/%d). "
+                        "Waiting %.0fs before retry...",
+                        batch_num,
+                        total_batches,
+                        attempt,
+                        max_retries,
+                        wait_time,
+                    )
+                    await asyncio.sleep(wait_time)
+                else:
+                    logger.error(
+                        "Non-retryable embedding error on batch %d: %s",
+                        batch_num,
+                        exc_str,
+                    )
+                    raise
+        else:
+            raise RuntimeError(
+                f"Failed to embed batch {batch_num} after "
+                f"{max_retries} retries due to rate limiting."
+            )
+
+        # Sleep between batches to stay under RPM limit
+        # (skip sleep after the last batch)
+        if i + batch_size < len(texts):
+            logger.info(
+                "Batch %d/%d complete. Sleeping %.0fs for rate limit...",
+                batch_num,
+                total_batches,
+                batch_delay,
+            )
+            await asyncio.sleep(batch_delay)
+
+    return all_embeddings
+
+
 # ── Hybrid retriever ─────────────────────────────────────────────────
 
 
 def _estimate_tokens(text: str) -> int:
     """Estimate token count from text using a simple heuristic."""
     return len(text) // 4
+
+
+def _get_cache_dir(owner: str, repo_name: str, branch: str) -> Path:
+    """Return the absolute cache directory for a given repo + branch."""
+    return FAISS_CACHE_DIR / f"{owner}_{repo_name}_{branch}"
 
 
 class HybridCodeRetriever:
@@ -126,7 +220,14 @@ class HybridCodeRetriever:
     with embedding-based similarity search for rich review context.
     """
 
-    def __init__(self, repo_path: Path, clone_dir: Path, owner: str, repo_name: str, branch: str) -> None:
+    def __init__(
+        self,
+        repo_path: Path,
+        clone_dir: Path,
+        owner: str,
+        repo_name: str,
+        branch: str,
+    ) -> None:
         """Initialize with repo path for graph and FAISS building."""
         self.repo_path = repo_path
         self.clone_dir = clone_dir
@@ -141,34 +242,39 @@ class HybridCodeRetriever:
         """Build both CodeGraph and FAISS index.
 
         Step 1: Build CodeGraph (sync, fast, no API calls)
-        Step 2: Build FAISS index (async-ish, slower, API calls)
-        Logs timing for each step separately.
+        Step 2: Load or build FAISS index (rate-limited, cached)
         """
         # Step 1: Structural graph
         t0 = time.perf_counter()
         self.code_graph.build(self.repo_path)
         t1 = time.perf_counter()
-        logger.info(
-            "CodeGraph built in %.2fs", t1 - t0
-        )
+        logger.info("CodeGraph built in %.2fs", t1 - t0)
 
-        # Step 2: Semantic FAISS index
+        # Step 2: Semantic FAISS index (cached)
         t2 = time.perf_counter()
-        
+
         embeddings = GoogleGenerativeAIEmbeddings(
             model="models/gemini-embedding-2",
             google_api_key=GEMINI_API_KEY,
         )
 
-        cache_dir = Path(f".faiss_cache/{self.owner}_{self.repo_name}_{self.branch}")
-        
-        if cache_dir.exists():
+        cache_dir = _get_cache_dir(self.owner, self.repo_name, self.branch)
+
+        if cache_dir.exists() and (cache_dir / "index.faiss").exists():
             logger.info("Loading cached FAISS index from %s", cache_dir)
-            self._vectorstore = FAISS.load_local(str(cache_dir), embeddings, allow_dangerous_deserialization=True)
+            self._vectorstore = FAISS.load_local(
+                str(cache_dir),
+                embeddings,
+                allow_dangerous_deserialization=True,
+            )
             self._chunk_sources = {
                 doc.metadata.get("source", "")
                 for doc in self._vectorstore.docstore._dict.values()
             }
+            logger.info(
+                "Loaded %d cached vectors",
+                len(self._vectorstore.docstore._dict),
+            )
         else:
             raw_docs = _collect_source_files(self.repo_path)
             logger.info(
@@ -195,19 +301,31 @@ class HybridCodeRetriever:
 
             if not chunks:
                 logger.warning(
-                    "No source documents found — retriever will be empty"
+                    "No source documents found -- retriever will be empty"
                 )
                 self._vectorstore = FAISS.from_texts(
-                    ["Empty repository — no source files found."],
+                    ["Empty repository -- no source files found."],
                     embeddings,
                 )
             else:
-                self._vectorstore = FAISS.from_documents(
-                    chunks, embeddings
+                # Rate-limited batch embedding
+                texts = [chunk.page_content for chunk in chunks]
+                metadatas = [chunk.metadata for chunk in chunks]
+
+                all_vectors = await _embed_texts_with_rate_limit(
+                    embeddings, texts
                 )
-            
+
+                # Build FAISS index from pre-computed embeddings
+                text_embedding_pairs = list(zip(texts, all_vectors))
+                self._vectorstore = FAISS.from_embeddings(
+                    text_embeddings=text_embedding_pairs,
+                    embedding=embeddings,
+                    metadatas=metadatas,
+                )
+
             # Save the newly built index
-            cache_dir.parent.mkdir(parents=True, exist_ok=True)
+            cache_dir.mkdir(parents=True, exist_ok=True)
             self._vectorstore.save_local(str(cache_dir))
             logger.info("Saved FAISS index to %s", cache_dir)
 
@@ -327,7 +445,7 @@ class HybridCodeRetriever:
             structural_tokens = _estimate_tokens(structural)
             if structural_tokens <= budget:
                 result_parts.append(
-                    "[STRUCTURAL CONTEXT — call graph analysis]\n"
+                    "[STRUCTURAL CONTEXT -- call graph analysis]\n"
                     f"{structural}"
                 )
                 budget -= structural_tokens
@@ -336,7 +454,7 @@ class HybridCodeRetriever:
                 char_limit = budget * 4
                 truncated = structural[:char_limit]
                 result_parts.append(
-                    "[STRUCTURAL CONTEXT — call graph analysis]\n"
+                    "[STRUCTURAL CONTEXT -- call graph analysis]\n"
                     f"{truncated}"
                 )
                 budget = 0
@@ -346,14 +464,14 @@ class HybridCodeRetriever:
             semantic_tokens = _estimate_tokens(semantic)
             if semantic_tokens <= budget:
                 result_parts.append(
-                    "[SEMANTIC CONTEXT — similarity search]\n"
+                    "[SEMANTIC CONTEXT -- similarity search]\n"
                     f"{semantic}"
                 )
             else:
                 char_limit = budget * 4
                 truncated = semantic[:char_limit]
                 result_parts.append(
-                    "[SEMANTIC CONTEXT — similarity search]\n"
+                    "[SEMANTIC CONTEXT -- similarity search]\n"
                     f"{truncated}"
                 )
 
@@ -378,11 +496,11 @@ async def run_repo_rag(state: dict[str, Any]) -> dict[str, Any]:
     clone_dir = _clone_repo(owner, repo_name, branch)
 
     hybrid = HybridCodeRetriever(
-        repo_path=clone_dir, 
+        repo_path=clone_dir,
         clone_dir=clone_dir,
         owner=owner,
         repo_name=repo_name,
-        branch=branch
+        branch=branch,
     )
     await hybrid.build()
 
