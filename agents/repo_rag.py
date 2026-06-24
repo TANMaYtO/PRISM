@@ -390,7 +390,31 @@ class HybridCodeRetriever:
             search_type="similarity",
             search_kwargs={"k": 6},
         )
-        docs: list[Document] = await retriever.ainvoke(query)
+        
+        # Add retry logic for embed_query (which is called by ainvoke)
+        docs: list[Document] = []
+        max_retries = 5
+        base_delay = 5.0
+        
+        for attempt in range(1, max_retries + 1):
+            try:
+                docs = await retriever.ainvoke(query)
+                break
+            except Exception as exc:
+                exc_str = str(exc)
+                if "429" in exc_str or "RESOURCE_EXHAUSTED" in exc_str:
+                    if attempt == max_retries:
+                        logger.error("Failed to retrieve semantic context after %d retries.", max_retries)
+                        return ""
+                    wait_time = base_delay * (2 ** (attempt - 1))
+                    logger.warning(
+                        "Rate limited on semantic query (attempt %d/%d). Waiting %.0fs...",
+                        attempt, max_retries, wait_time
+                    )
+                    await asyncio.sleep(wait_time)
+                else:
+                    logger.error("Non-retryable error in semantic retrieval: %s", exc_str)
+                    return ""
 
         # Filter out chunks already covered by structural context
         structural_files = self._extract_filepaths(structural_text)
