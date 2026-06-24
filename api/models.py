@@ -168,6 +168,8 @@ class BenchmarkResult(BaseModel):
     severity_weighted_score: float = Field(ge=0.0, le=1.0)
     human_findings_count: int
     prism_findings_count: int
+    prism_findings: list[dict[str, Any]] = Field(default_factory=list)
+    human_comments: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class BenchmarkSummary(BaseModel):

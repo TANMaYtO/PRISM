@@ -168,6 +168,8 @@ async def evaluate_prism(
                 severity_weighted_score=round(severity_score, 4),
                 human_findings_count=len(human_comments),
                 prism_findings_count=len(prism_findings),
+                prism_findings=prism_findings,
+                human_comments=human_comments,
             )
             results.append(result)
 
