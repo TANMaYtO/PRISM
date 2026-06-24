@@ -88,9 +88,14 @@ def _collect_source_files(repo_path: Path) -> list[Document]:
 
 
 def _clone_repo(owner: str, repo_name: str, branch: str) -> Path:
-    """Shallow-clone the repository to a temporary directory."""
+    """Shallow-clone the repository to a cached directory."""
     TEMP_CLONE_DIR.mkdir(parents=True, exist_ok=True)
-    clone_dir = Path(tempfile.mkdtemp(dir=TEMP_CLONE_DIR))
+    clone_dir = TEMP_CLONE_DIR / f"{owner}_{repo_name}_{branch}"
+    
+    if clone_dir.exists() and (clone_dir / ".git").exists():
+        logger.info("Using cached repo clone at %s", clone_dir)
+        return clone_dir
+
     clone_url = (
         f"https://{GITHUB_TOKEN}@github.com/{owner}/{repo_name}.git"
     )

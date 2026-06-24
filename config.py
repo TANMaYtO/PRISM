@@ -46,6 +46,9 @@ _PROJECT_ROOT: Path = Path(__file__).resolve().parent
 TEMP_CLONE_DIR: Path = _PROJECT_ROOT / ".tmp_clones"
 BENCHMARK_RESULTS_DIR: Path = _PROJECT_ROOT / "benchmark" / "results"
 FAISS_CACHE_DIR: Path = _PROJECT_ROOT / ".faiss_cache"
+
+# Disable HF Hub network pings for faster PR instantiations
+os.environ["HF_HUB_OFFLINE"] = "1"
 SUPPORTED_EXTENSIONS: frozenset[str] = frozenset(
     {
         ".py", ".js", ".ts", ".jsx", ".tsx", ".go", ".rs",
