@@ -173,6 +173,7 @@ class HybridCodeRetriever:
         logger.info("Loading local HuggingFace embeddings: %s", EMBEDDING_MODEL_NAME)
         embeddings = HuggingFaceEmbeddings(
             model_name=EMBEDDING_MODEL_NAME,
+            model_kwargs={"local_files_only": True},
         )
 
         cache_dir = _get_cache_dir(self.owner, self.repo_name, self.branch)

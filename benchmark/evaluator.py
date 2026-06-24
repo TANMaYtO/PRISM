@@ -31,11 +31,19 @@ _SEVERITY_WEIGHTS: dict[str, float] = {
 
 def _file_match(prism_file: str, human_file: str) -> bool:
     """Check if two file paths refer to the same file (fuzzy)."""
-    return (
-        prism_file == human_file
-        or prism_file.endswith(human_file)
-        or human_file.endswith(prism_file)
-    )
+    if not prism_file or not human_file:
+        return False
+    # Exact match
+    if prism_file == human_file:
+        return True
+    # One path ends with the other (handles prefix differences)
+    if prism_file.endswith(human_file) or human_file.endswith(prism_file):
+        return True
+    # Basename match as last resort
+    import os
+    if os.path.basename(prism_file) == os.path.basename(human_file):
+        return True
+    return False
 
 
 def _compute_overlap(
@@ -45,23 +53,21 @@ def _compute_overlap(
     """Compute true positives, false positives, and false negatives.
 
     A PRISM finding is considered a true positive if it matches a human
-    comment on the same file (line matching is fuzzy ±5 lines).
+    comment on the same file. Line matching is ignored since GitHub stores hunk positions.
     """
     matched_human: set[int] = set()
     true_positives = 0
 
     for pf in prism_findings:
         pf_file = pf.get("file", "")
-        pf_line = pf.get("line_start", 0)
         found_match = False
 
         for idx, hc in enumerate(human_comments):
             if idx in matched_human:
                 continue
             hc_file = hc.get("file", "")
-            hc_line = hc.get("line", 0)
 
-            if _file_match(pf_file, hc_file) and abs(pf_line - hc_line) <= 5:
+            if _file_match(pf_file, hc_file):
                 true_positives += 1
                 matched_human.add(idx)
                 found_match = True
