@@ -1,7 +1,7 @@
 """Repo RAG agent -- hybrid retrieval with CodeGraph + FAISS.
 
 Clones the repository, builds a structural code graph via tree-sitter
-and a FAISS semantic index via Google Generative AI embeddings.
+and a FAISS semantic index via HuggingFace local embeddings.
 The ``HybridCodeRetriever`` exposes a per-file ``get_context`` method
 that combines call-graph analysis with similarity search for maximum
 review context quality.
@@ -9,9 +9,7 @@ review context quality.
 
 from __future__ import annotations
 
-import asyncio
 import logging
-import math
 import tempfile
 import time
 from pathlib import Path
@@ -21,17 +19,15 @@ from git import Repo
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
 from langchain_core.documents import Document
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
+from langchain_huggingface import HuggingFaceEmbeddings
 
 from agents.code_graph import CodeGraph
 from agents.pr_fetcher import FileDiff
 from config import (
     CHUNK_OVERLAP,
     CHUNK_SIZE,
-    EMBEDDING_BATCH_DELAY,
-    EMBEDDING_BATCH_SIZE,
+    EMBEDDING_MODEL_NAME,
     FAISS_CACHE_DIR,
-    GEMINI_API_KEY,
     GITHUB_TOKEN,
     MAX_CONTEXT_TOKENS,
     SUPPORTED_EXTENSIONS,
@@ -116,90 +112,6 @@ def _clone_repo(owner: str, repo_name: str, branch: str) -> Path:
     return clone_dir
 
 
-# ── Rate-limited batch embedding ─────────────────────────────────────
-
-
-async def _embed_texts_with_rate_limit(
-    embeddings: GoogleGenerativeAIEmbeddings,
-    texts: list[str],
-    batch_size: int = EMBEDDING_BATCH_SIZE,
-    batch_delay: float = EMBEDDING_BATCH_DELAY,
-    max_retries: int = 5,
-) -> list[list[float]]:
-    """Embed texts in small batches with rate limiting and retry logic.
-
-    Respects the Gemini free-tier limit of 100 RPM by sending at most
-    ``batch_size`` texts per minute (default 90 to leave headroom).
-    On 429 errors, retries with exponential backoff.
-    """
-    all_embeddings: list[list[float]] = []
-    total_batches = math.ceil(len(texts) / batch_size)
-
-    logger.info(
-        "Embedding %d texts in %d batches (batch_size=%d, delay=%.0fs)",
-        len(texts),
-        total_batches,
-        batch_size,
-        batch_delay,
-    )
-
-    for i in range(0, len(texts), batch_size):
-        batch_num = (i // batch_size) + 1
-        batch = texts[i : i + batch_size]
-
-        for attempt in range(1, max_retries + 1):
-            try:
-                logger.info(
-                    "Embedding batch %d/%d (%d texts) — attempt %d",
-                    batch_num,
-                    total_batches,
-                    len(batch),
-                    attempt,
-                )
-                batch_result = embeddings.embed_documents(batch)
-                all_embeddings.extend(batch_result)
-                break
-            except Exception as exc:
-                exc_str = str(exc)
-                if "429" in exc_str or "RESOURCE_EXHAUSTED" in exc_str:
-                    wait_time = batch_delay * (2 ** (attempt - 1))
-                    logger.warning(
-                        "Rate limited on batch %d/%d (attempt %d/%d). "
-                        "Waiting %.0fs before retry...",
-                        batch_num,
-                        total_batches,
-                        attempt,
-                        max_retries,
-                        wait_time,
-                    )
-                    await asyncio.sleep(wait_time)
-                else:
-                    logger.error(
-                        "Non-retryable embedding error on batch %d: %s",
-                        batch_num,
-                        exc_str,
-                    )
-                    raise
-        else:
-            raise RuntimeError(
-                f"Failed to embed batch {batch_num} after "
-                f"{max_retries} retries due to rate limiting."
-            )
-
-        # Sleep between batches to stay under RPM limit
-        # (skip sleep after the last batch)
-        if i + batch_size < len(texts):
-            logger.info(
-                "Batch %d/%d complete. Sleeping %.0fs for rate limit...",
-                batch_num,
-                total_batches,
-                batch_delay,
-            )
-            await asyncio.sleep(batch_delay)
-
-    return all_embeddings
-
-
 # ── Hybrid retriever ─────────────────────────────────────────────────
 
 
@@ -242,7 +154,7 @@ class HybridCodeRetriever:
         """Build both CodeGraph and FAISS index.
 
         Step 1: Build CodeGraph (sync, fast, no API calls)
-        Step 2: Load or build FAISS index (rate-limited, cached)
+        Step 2: Load or build FAISS index using local HuggingFace embeddings
         """
         # Step 1: Structural graph
         t0 = time.perf_counter()
@@ -250,12 +162,12 @@ class HybridCodeRetriever:
         t1 = time.perf_counter()
         logger.info("CodeGraph built in %.2fs", t1 - t0)
 
-        # Step 2: Semantic FAISS index (cached)
+        # Step 2: Semantic FAISS index (cached locally)
         t2 = time.perf_counter()
 
-        embeddings = GoogleGenerativeAIEmbeddings(
-            model="models/gemini-embedding-2",
-            google_api_key=GEMINI_API_KEY,
+        logger.info("Loading local HuggingFace embeddings: %s", EMBEDDING_MODEL_NAME)
+        embeddings = HuggingFaceEmbeddings(
+            model_name=EMBEDDING_MODEL_NAME,
         )
 
         cache_dir = _get_cache_dir(self.owner, self.repo_name, self.branch)
@@ -308,20 +220,9 @@ class HybridCodeRetriever:
                     embeddings,
                 )
             else:
-                # Rate-limited batch embedding
-                texts = [chunk.page_content for chunk in chunks]
-                metadatas = [chunk.metadata for chunk in chunks]
-
-                all_vectors = await _embed_texts_with_rate_limit(
-                    embeddings, texts
-                )
-
-                # Build FAISS index from pre-computed embeddings
-                text_embedding_pairs = list(zip(texts, all_vectors))
-                self._vectorstore = FAISS.from_embeddings(
-                    text_embeddings=text_embedding_pairs,
-                    embedding=embeddings,
-                    metadatas=metadatas,
+                logger.info("Building FAISS index with %d chunks locally (this may take a few minutes)...", len(chunks))
+                self._vectorstore = FAISS.from_documents(
+                    chunks, embeddings
                 )
 
             # Save the newly built index
@@ -391,30 +292,12 @@ class HybridCodeRetriever:
             search_kwargs={"k": 6},
         )
         
-        # Add retry logic for embed_query (which is called by ainvoke)
-        docs: list[Document] = []
-        max_retries = 5
-        base_delay = 5.0
-        
-        for attempt in range(1, max_retries + 1):
-            try:
-                docs = await retriever.ainvoke(query)
-                break
-            except Exception as exc:
-                exc_str = str(exc)
-                if "429" in exc_str or "RESOURCE_EXHAUSTED" in exc_str:
-                    if attempt == max_retries:
-                        logger.error("Failed to retrieve semantic context after %d retries.", max_retries)
-                        return ""
-                    wait_time = base_delay * (2 ** (attempt - 1))
-                    logger.warning(
-                        "Rate limited on semantic query (attempt %d/%d). Waiting %.0fs...",
-                        attempt, max_retries, wait_time
-                    )
-                    await asyncio.sleep(wait_time)
-                else:
-                    logger.error("Non-retryable error in semantic retrieval: %s", exc_str)
-                    return ""
+        # Local embeddings so no rate limits or backoff needed
+        try:
+            docs: list[Document] = await retriever.ainvoke(query)
+        except Exception as exc:
+            logger.error("Error in local semantic retrieval: %s", str(exc))
+            return ""
 
         # Filter out chunks already covered by structural context
         structural_files = self._extract_filepaths(structural_text)

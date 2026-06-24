@@ -36,7 +36,7 @@ SUPABASE_KEY: str = _require_env("SUPABASE_KEY")
 # ── Model / RAG defaults (overridable via env) ──────────────────────
 # LangChain / Google GenAI configuration
 MODEL_NAME = os.getenv("MODEL_NAME", "gemini-3.1-flash-lite")
-EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL_NAME", "gemini-embedding-2")
+EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL_NAME", "all-MiniLM-L6-v2")
 MAX_CONTEXT_TOKENS: int = int(os.getenv("MAX_CONTEXT_TOKENS", "8000"))
 CHUNK_SIZE: int = int(os.getenv("CHUNK_SIZE", "500"))
 CHUNK_OVERLAP: int = int(os.getenv("CHUNK_OVERLAP", "50"))
@@ -46,8 +46,6 @@ _PROJECT_ROOT: Path = Path(__file__).resolve().parent
 TEMP_CLONE_DIR: Path = _PROJECT_ROOT / ".tmp_clones"
 BENCHMARK_RESULTS_DIR: Path = _PROJECT_ROOT / "benchmark" / "results"
 FAISS_CACHE_DIR: Path = _PROJECT_ROOT / ".faiss_cache"
-EMBEDDING_BATCH_SIZE: int = int(os.getenv("EMBEDDING_BATCH_SIZE", "90"))
-EMBEDDING_BATCH_DELAY: float = float(os.getenv("EMBEDDING_BATCH_DELAY", "62.0"))
 SUPPORTED_EXTENSIONS: frozenset[str] = frozenset(
     {
         ".py", ".js", ".ts", ".jsx", ".tsx", ".go", ".rs",
