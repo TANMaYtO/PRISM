@@ -1,11 +1,15 @@
 # Environments
-.env
+.env*
 .venv
 env/
 venv/
 ENV/
 env.bak/
 venv.bak/
+
+# Frontend (Next.js) overrides
+node_modules/
+.next/
 
 # Python
 __pycache__/
