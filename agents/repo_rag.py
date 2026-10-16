@@ -159,6 +159,7 @@ class HybridCodeRetriever:
         owner: str,
         repo_name: str,
         branch: str,
+        target_files: list[str] | None = None,
     ) -> None:
         """Initialize with repo path for graph and FAISS building."""
         self.repo_path = repo_path
@@ -166,6 +167,7 @@ class HybridCodeRetriever:
         self.owner = owner
         self.repo_name = repo_name
         self.branch = branch
+        self.target_files: list[str] = target_files or []
         self.code_graph: CodeGraph = CodeGraph()
         self._vectorstore: FAISS | None = None
         self._chunk_sources: set[str] = set()
@@ -188,7 +190,6 @@ class HybridCodeRetriever:
         logger.info("Loading local HuggingFace embeddings: %s", EMBEDDING_MODEL_NAME)
         embeddings = HuggingFaceEmbeddings(
             model_name=EMBEDDING_MODEL_NAME,
-            model_kwargs={"local_files_only": True},
         )
 
         cache_dir = _get_cache_dir(self.owner, self.repo_name, self.branch)
@@ -214,12 +215,42 @@ class HybridCodeRetriever:
                 "Collected %d source files from repo", len(raw_docs)
             )
 
+            # Prioritize target changed files and their immediate module neighborhood
+            if self.target_files and len(raw_docs) > 80:
+                target_set = set(self.target_files)
+                target_dirs = {
+                    Path(f).parent.as_posix() for f in self.target_files
+                }
+
+                def _compute_file_priority(doc: Document) -> int:
+                    """Return sort order priority for indexing documents."""
+                    src = doc.metadata.get("source", "")
+                    if src in target_set:
+                        return 0
+                    if Path(src).parent.as_posix() in target_dirs:
+                        return 1
+                    return 2
+
+                raw_docs.sort(key=_compute_file_priority)
+                raw_docs = raw_docs[:80]
+                logger.info(
+                    "Focused semantic indexing on %d relevant source files",
+                    len(raw_docs),
+                )
+
             splitter = RecursiveCharacterTextSplitter(
                 chunk_size=CHUNK_SIZE,
                 chunk_overlap=CHUNK_OVERLAP,
                 separators=["\nclass ", "\ndef ", "\n\n", "\n", " "],
             )
             chunks = splitter.split_documents(raw_docs)
+            if len(chunks) > 400:
+                chunks = chunks[:400]
+                logger.info(
+                    "Capped semantic indexing to %d chunks for fast real-time review",
+                    len(chunks),
+                )
+
             logger.info(
                 "Split into %d chunks (size=%d, overlap=%d)",
                 len(chunks),
@@ -241,7 +272,7 @@ class HybridCodeRetriever:
                     embeddings,
                 )
             else:
-                logger.info("Building FAISS index with %d chunks locally (this may take a few minutes)...", len(chunks))
+                logger.info("Building FAISS index with %d chunks locally...", len(chunks))
                 self._vectorstore = FAISS.from_documents(
                     chunks, embeddings
                 )
@@ -422,6 +453,7 @@ async def run_repo_rag(state: dict[str, Any]) -> dict[str, Any]:
     branch: str = pr_data.base_ref
 
     clone_dir = _clone_repo(owner, repo_name, branch)
+    target_files = [f.filename for f in pr_data.files]
 
     hybrid = HybridCodeRetriever(
         repo_path=clone_dir,
@@ -429,6 +461,7 @@ async def run_repo_rag(state: dict[str, Any]) -> dict[str, Any]:
         owner=owner,
         repo_name=repo_name,
         branch=branch,
+        target_files=target_files,
     )
     await hybrid.build()
 
