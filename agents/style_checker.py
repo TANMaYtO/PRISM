@@ -15,6 +15,11 @@ from typing import Any
 
 from langchain_google_genai import ChatGoogleGenerativeAI
 
+from agents.llm_utils import (
+    invoke_llm_with_retry,
+    is_reviewable_file,
+    parse_json_findings,
+)
 from config import GEMINI_API_KEY, MAX_CONTEXT_TOKENS, MODEL_NAME
 
 logger = logging.getLogger(__name__)
@@ -105,34 +110,7 @@ def _build_prompt(diff: str, context: str) -> str:
 
 def _parse_findings(raw: Any, agent_source: str) -> list[dict[str, Any]]:
     """Parse LLM output into a list of finding dicts."""
-    if isinstance(raw, list):
-        if raw and isinstance(raw[0], dict) and "text" in raw[0]:
-            raw = raw[0]["text"]
-        else:
-            raw = str(raw)
-    
-    if not isinstance(raw, str):
-        raw = str(raw)
-
-    cleaned = raw.strip()
-    if cleaned.startswith("```"):
-        cleaned = cleaned.split("\n", 1)[-1].rsplit("```", 1)[0]
-
-    try:
-        findings = json.loads(cleaned)
-    except json.JSONDecodeError:
-        logger.warning(
-            "Style checker returned invalid JSON: %s…", cleaned[:200]
-        )
-        return []
-
-    if not isinstance(findings, list):
-        return []
-
-    for finding in findings:
-        finding["agent_source"] = agent_source
-
-    return findings
+    return parse_json_findings(raw, agent_source)
 
 
 async def run_style_checker(state: dict[str, Any]) -> dict[str, Any]:
@@ -141,52 +119,59 @@ async def run_style_checker(state: dict[str, Any]) -> dict[str, Any]:
     Reads ``pr_data`` and ``retriever`` from state.
     Returns a partial state update with ``style_findings``.
     """
-    pr_data = state["pr_data"]
-    retriever = state.get("retriever")
+    try:
+        pr_data = state["pr_data"]
+        retriever = state.get("retriever")
 
-    # Build system prompt with all detected languages
-    language_conventions = _detect_languages(pr_data.diff_files)
-    system_prompt = _SYSTEM_PROMPT.format(
-        language_conventions=language_conventions
-    )
+        # Build system prompt with all detected languages
+        language_conventions = _detect_languages(pr_data.diff_files)
+        system_prompt = _SYSTEM_PROMPT.replace(
+            "{language_conventions}", language_conventions
+        )
 
-    llm = ChatGoogleGenerativeAI(
-        model=MODEL_NAME,
-        google_api_key=GEMINI_API_KEY,
-        temperature=0.1,
-        max_output_tokens=MAX_CONTEXT_TOKENS,
-    )
+        llm = ChatGoogleGenerativeAI(
+            model=MODEL_NAME,
+            google_api_key=GEMINI_API_KEY,
+            temperature=0.1,
+            max_output_tokens=MAX_CONTEXT_TOKENS,
+        )
 
-    all_findings: list[dict[str, Any]] = []
+        all_findings: list[dict[str, Any]] = []
+        combined_prompts: list[str] = []
 
-    combined_prompts = []
-    for diff_file in pr_data.diff_files:
-        if not diff_file.patch:
-            continue
-        context_str = ""
-        if retriever and hasattr(retriever, "get_context"):
-            context_str = await retriever.get_context(diff_file)
-        
-        combined_prompts.append(f"""### File: {diff_file.filename}\n\n```diff\n{diff_file.patch}\n```\n\nContext:\n{context_str}""")
+        for diff_file in pr_data.diff_files:
+            if not diff_file.patch or not is_reviewable_file(diff_file.filename):
+                continue
+            context_str = ""
+            if retriever and hasattr(retriever, "get_context"):
+                context_str = await retriever.get_context(diff_file)
 
-    if not combined_prompts:
+            combined_prompts.append(
+                f"### File: {diff_file.filename}\n\n```diff\n"
+                f"{diff_file.patch}\n```\n\nContext:\n{context_str}"
+            )
+
+        if not combined_prompts:
+            return {"style_findings": []}
+
+        prompt = "## Pull Request Diffs\n\n" + "\n\n".join(combined_prompts)
+
+        raw_output = await invoke_llm_with_retry(
+            llm=llm,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": prompt},
+            ],
+        )
+
+        findings = _parse_findings(raw_output, "style_checker")
+        all_findings.extend(findings)
+
+        logger.info(
+            f"Style Checker found {len(all_findings)} issues across "
+            f"{len(pr_data.diff_files)} files"
+        )
+        return {"style_findings": all_findings}
+    except Exception as exc:
+        logger.exception(f"Error in style_checker agent: {exc}")
         return {"style_findings": []}
-
-    prompt = "## Pull Request Diffs\n\n" + "\n\n".join(combined_prompts)
-
-    response = await llm.ainvoke(
-        [
-            {"role": "system", "content": _SYSTEM_PROMPT},
-            {"role": "user", "content": prompt},
-        ]
-    )
-
-    findings = _parse_findings(response.content, "style_checker")
-    all_findings.extend(findings)
-
-    logger.info(
-        "Style Checker found %d issues across %d files",
-        len(all_findings),
-        len(pr_data.diff_files),
-    )
-    return {"style_findings": all_findings}

@@ -11,7 +11,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any
 
-from github import Github
+from github import Github, GithubException
 from github.PullRequest import PullRequest
 
 from config import GITHUB_TOKEN
@@ -109,56 +109,83 @@ async def run_pr_fetcher(state: dict[str, Any]) -> dict[str, Any]:
     repo_name: str = state["repo_name"]
     pr_number: int = state["pr_number"]
 
-    logger.info(
-        "Fetching PR #%d from %s/%s", pr_number, owner, repo_name
-    )
+    logger.info(f"Fetching PR #{pr_number} from {owner}/{repo_name}")
 
     gh = Github(GITHUB_TOKEN)
-    repo = gh.get_repo(f"{owner}/{repo_name}")
-    pr: PullRequest = repo.get_pull(pr_number)
+    try:
+        repo = gh.get_repo(f"{owner}/{repo_name}")
+        pr: PullRequest = repo.get_pull(pr_number)
+    except GithubException as gh_err:
+        gh.close()
+        status_code = getattr(gh_err, "status", None)
+        if status_code == 404:
+            raise ValueError(
+                f"Repository '{owner}/{repo_name}' or PR #{pr_number} "
+                "could not be found on GitHub."
+            ) from gh_err
+        if status_code in (401, 403):
+            raise PermissionError(
+                f"GitHub API access denied ({status_code}). Please verify GITHUB_TOKEN."
+            ) from gh_err
+        raise RuntimeError(
+            f"GitHub API error while fetching PR #{pr_number}: {gh_err.data}"
+        ) from gh_err
+    except Exception as exc:
+        gh.close()
+        raise RuntimeError(
+            f"Failed to connect to GitHub for {owner}/{repo_name}#{pr_number}: {exc}"
+        ) from exc
 
     # Build structured diff for every changed file
     diff_files: list[FileDiff] = []
     raw_patches: list[str] = []
 
-    for f in pr.get_files():
-        patch = f.patch or ""
-        hunks = _parse_patch_into_hunks(patch)
-        diff_files.append(
-            FileDiff(
-                filename=f.filename,
-                status=f.status,
-                additions=f.additions,
-                deletions=f.deletions,
-                patch=patch,
-                hunks=hunks,
+    try:
+        all_changed_files = list(pr.get_files())
+        if len(all_changed_files) > 40:
+            logger.info(
+                f"PR #{pr_number} contains {len(all_changed_files)} files; "
+                "capping review to top 40 files for responsiveness"
             )
+            all_changed_files = all_changed_files[:40]
+
+        for f in all_changed_files:
+            patch = f.patch or ""
+            hunks = _parse_patch_into_hunks(patch)
+            diff_files.append(
+                FileDiff(
+                    filename=f.filename,
+                    status=f.status,
+                    additions=f.additions,
+                    deletions=f.deletions,
+                    patch=patch,
+                    hunks=hunks,
+                )
+            )
+            if patch:
+                raw_patches.append(f"--- a/{f.filename}\n+++ b/{f.filename}\n{patch}")
+
+        raw_diff = "\n\n".join(raw_patches)
+
+        pr_data = PRData(
+            owner=owner,
+            repo=repo_name,
+            number=pr_number,
+            title=pr.title,
+            body=pr.body or "",
+            base_ref=pr.base.ref,
+            head_ref=pr.head.ref,
+            diff_files=diff_files,
+            raw_diff=raw_diff,
         )
-        if patch:
-            raw_patches.append(f"--- a/{f.filename}\n+++ b/{f.filename}\n{patch}")
 
-    raw_diff = "\n\n".join(raw_patches)
-
-    pr_data = PRData(
-        owner=owner,
-        repo=repo_name,
-        number=pr_number,
-        title=pr.title,
-        body=pr.body or "",
-        base_ref=pr.base.ref,
-        head_ref=pr.head.ref,
-        diff_files=diff_files,
-        raw_diff=raw_diff,
-    )
-
-    logger.info(
-        "Fetched %d changed files (%d additions, %d deletions)",
-        len(diff_files),
-        sum(f.additions for f in diff_files),
-        sum(f.deletions for f in diff_files),
-    )
-
-    gh.close()
+        logger.info(
+            f"Fetched {len(diff_files)} changed files "
+            f"({sum(f.additions for f in diff_files)} additions, "
+            f"{sum(f.deletions for f in diff_files)} deletions)"
+        )
+    finally:
+        gh.close()
 
     return {
         "pr_data": pr_data,

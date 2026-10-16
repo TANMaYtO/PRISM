@@ -133,16 +133,27 @@ export function useReview(urlParam: string | null) {
         setReviewId(data.id);
       });
 
+      let receivedCustomError = false;
+
       eventSource.addEventListener("error", (e: MessageEvent) => {
-        setError(e.data || "An error occurred during the review stream.");
+        let errorMsg = "An error occurred during the review stream.";
+        try {
+          errorMsg = JSON.parse(e.data);
+        } catch {
+          errorMsg = e.data || errorMsg;
+        }
+        setError(errorMsg);
+        receivedCustomError = true;
         setIsStreaming(false);
         eventSource?.close();
       });
 
       eventSource.onerror = () => {
-        // Only set error if not already finished
-        if (!finalReview) {
-          setError("Lost connection to the server.");
+        // Only set error if not already finished and no custom error received
+        if (!finalReview && !receivedCustomError) {
+          setError(
+            "Lost connection to the server. Please check your network or verify the PR URL."
+          );
         }
         setIsStreaming(false);
         eventSource?.close();

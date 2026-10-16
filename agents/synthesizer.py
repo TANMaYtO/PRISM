@@ -14,6 +14,7 @@ from typing import Any
 
 from langchain_google_genai import ChatGoogleGenerativeAI
 
+from agents.llm_utils import invoke_llm_with_retry
 from api.models import (
     AgentFinding,
     AgentSource,
@@ -158,7 +159,13 @@ async def run_synthesizer(state: dict[str, Any]) -> dict[str, Any]:
 
     # Collect findings from all agents
     all_raw: list[dict[str, Any]] = []
-    for key in ("bug_findings", "security_findings", "logic_findings", "style_findings"):
+    finding_keys = (
+        "bug_findings",
+        "security_findings",
+        "logic_findings",
+        "style_findings",
+    )
+    for key in finding_keys:
         findings = state.get(key, [])
         if isinstance(findings, list):
             all_raw.extend(findings)
@@ -176,11 +183,12 @@ async def run_synthesizer(state: dict[str, Any]) -> dict[str, Any]:
     # Validate into Pydantic models
     findings = _to_agent_findings(deduped_raw)
 
+    def _finding_severity_rank(f: AgentFinding) -> int:
+        """Return integer rank for sorting findings by severity descending."""
+        return _SEVERITY_RANK.get(f.severity.value, 0)
+
     # Sort by severity (most critical first)
-    findings.sort(
-        key=lambda f: _SEVERITY_RANK.get(f.severity.value, 0),
-        reverse=True,
-    )
+    findings.sort(key=_finding_severity_rank, reverse=True)
 
     stats = _compute_stats(findings)
     risk_rating = _determine_risk(stats)
@@ -204,24 +212,35 @@ async def run_synthesizer(state: dict[str, Any]) -> dict[str, Any]:
         for f in findings[:20]  # Cap to avoid token overflow
     ]
 
-    prompt = _SUMMARY_PROMPT.format(
-        findings_json=json.dumps(findings_for_prompt, indent=2),
-        pr_title=pr_data.title,
-        pr_description=pr_data.body[:500] if pr_data.body else "No description.",
+    findings_json = json.dumps(findings_for_prompt, indent=2)
+    pr_desc = pr_data.body[:500] if pr_data.body else "No description."
+
+    prompt = (
+        "You are a senior engineering manager writing the executive summary for\n"
+        "an automated code review. Given the following deduplicated findings\n"
+        "from four specialised review agents, write a concise 3–5 sentence\n"
+        "summary of the pull request's quality.\n\n"
+        "Include:\n"
+        "- The overall risk level and why\n"
+        "- The most critical findings (if any)\n"
+        "- A brief recommendation (approve, request changes, or needs discussion)\n\n"
+        f"Findings:\n{findings_json}\n\n"
+        f"PR Title: {pr_data.title}\n"
+        f"PR Description: {pr_desc}\n\n"
+        "Respond with ONLY the summary text — no JSON, no markdown headings."
     )
 
-    response = await llm.ainvoke(
-        [{"role": "user", "content": prompt}]
+    summary = await invoke_llm_with_retry(
+        llm=llm,
+        messages=[{"role": "user", "content": prompt}],
     )
-    raw = response.content
-    if isinstance(raw, list):
-        if raw and isinstance(raw[0], dict) and "text" in raw[0]:
-            raw = raw[0]["text"]
-        else:
-            raw = str(raw)
-    if not isinstance(raw, str):
-        raw = str(raw)
-    summary = raw.strip()
+
+    if not summary:
+        summary = (
+            f"Automated review completed for PR #{pr_data.number}. "
+            f"Identified {len(findings)} total findings across 4 analysis agents "
+            f"with an overall risk rating of {risk_rating.value}."
+        )
 
     # Compose final response
     review = PRReviewResponse(

@@ -85,6 +85,7 @@ app.include_router(benchmark_router, prefix="/benchmark", tags=["Benchmark"])
 
 
 @app.get("/", tags=["Health"])
+@app.head("/", tags=["Health"])
 async def health_check() -> dict[str, str]:
     """Return service health status."""
     return {
