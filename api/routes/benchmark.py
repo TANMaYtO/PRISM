@@ -6,6 +6,7 @@ comparing PRISM findings against human reviewer comments.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from pathlib import Path
@@ -78,17 +79,18 @@ async def get_benchmark() -> BenchmarkSummary:
     """Return the latest stored benchmark results."""
     try:
         client = await get_client()
-        result = (
-            await client.table("benchmarks")
+        result = await asyncio.wait_for(
+            client.table("benchmarks")
             .select("*")
             .order("created_at", desc=True)
             .limit(1)
-            .execute()
+            .execute(),
+            timeout=3.0,
         )
         if result.data and len(result.data) > 0:
             return BenchmarkSummary(**result.data[0]["summary_data"])
     except Exception as exc:
-        logger.error("Failed to load benchmark from Supabase: %s", exc)
+        logger.warning("Failed to load benchmark from Supabase: %s", exc)
 
     logger.info("Falling back to local disk for benchmark results")
     results = _load_latest_results()

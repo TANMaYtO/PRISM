@@ -6,6 +6,7 @@ and returns a ``PRReviewResponse`` with all findings.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
@@ -31,12 +32,18 @@ def _validate_repo_params(owner: str, name: str, pr_number: int) -> None:
     if not _REPO_SEGMENT_RE.match(owner):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid repository owner: '{owner}'. Only alphanumeric, hyphen, period, and underscore characters are allowed.",
+            detail=(
+                f"Invalid repository owner: '{owner}'. "
+                "Only alphanumeric, hyphen, period, and underscore characters are allowed."
+            ),
         )
     if not _REPO_SEGMENT_RE.match(name):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid repository name: '{name}'. Only alphanumeric, hyphen, period, and underscore characters are allowed.",
+            detail=(
+                f"Invalid repository name: '{name}'. "
+                "Only alphanumeric, hyphen, period, and underscore characters are allowed."
+            ),
         )
     if pr_number <= 0:
         raise HTTPException(
@@ -55,7 +62,9 @@ def _validate_repo_params(owner: str, name: str, pr_number: int) -> None:
         "After completion, it saves the final review to Supabase."
     ),
 )
-async def create_review(repo_owner: str, repo_name: str, pr_number: int) -> StreamingResponse:
+async def create_review(
+    repo_owner: str, repo_name: str, pr_number: int
+) -> StreamingResponse:
     """Execute a full PRISM review and stream SSE events."""
     _validate_repo_params(repo_owner, repo_name, pr_number)
 
@@ -65,18 +74,32 @@ async def create_review(repo_owner: str, repo_name: str, pr_number: int) -> Stre
         repo_name,
         pr_number,
     )
-    
-    # Recreate the request object locally to minimize refactoring
-    request = PRReviewRequest(repo_owner=repo_owner, repo_name=repo_name, pr_number=pr_number)
+
+    request = PRReviewRequest(
+        repo_owner=repo_owner, repo_name=repo_name, pr_number=pr_number
+    )
 
     async def event_generator() -> AsyncGenerator[str, None]:
         final_review_data: Any = None
+        stream_iter = run_review_stream(
+            repo_owner=request.repo_owner,
+            repo_name=request.repo_name,
+            pr_number=request.pr_number,
+        ).__aiter__()
+
         try:
-            async for payload in run_review_stream(
-                repo_owner=request.repo_owner,
-                repo_name=request.repo_name,
-                pr_number=request.pr_number,
-            ):
+            while True:
+                try:
+                    payload = await asyncio.wait_for(
+                        stream_iter.__anext__(), timeout=5.0
+                    )
+                except asyncio.TimeoutError:
+                    # Send standard SSE keepalive comment to keep Vercel/Render proxy connection alive
+                    yield ": keep-alive\n\n"
+                    continue
+                except StopAsyncIteration:
+                    break
+
                 event_type = payload.get("event", "message")
                 data = payload.get("data", "")
 
@@ -96,20 +119,30 @@ async def create_review(repo_owner: str, repo_name: str, pr_number: int) -> Stre
 
             if final_review_data:
                 logger.info("Persisting review to Supabase")
-                if isinstance(final_review_data, str):
-                    review_obj = PRReviewResponse.model_validate_json(final_review_data)
-                else:
-                    review_obj = PRReviewResponse.model_validate(final_review_data)
+                try:
+                    if isinstance(final_review_data, str):
+                        review_obj = PRReviewResponse.model_validate_json(
+                            final_review_data
+                        )
+                    else:
+                        review_obj = PRReviewResponse.model_validate(
+                            final_review_data
+                        )
 
-                review_id = await save_review(
-                    repo_owner=request.repo_owner,
-                    repo_name=request.repo_name,
-                    pr_number=request.pr_number,
-                    review=review_obj,
-                )
-                if review_id:
-                    yield f"event: saved\ndata: {{\"id\": \"{review_id}\"}}\n\n"
-                    yield f"event: persisted\ndata: {{\"id\": \"{review_id}\"}}\n\n"
+                    review_id = await asyncio.wait_for(
+                        save_review(
+                            repo_owner=request.repo_owner,
+                            repo_name=request.repo_name,
+                            pr_number=request.pr_number,
+                            review=review_obj,
+                        ),
+                        timeout=4.0,
+                    )
+                    if review_id:
+                        yield f"event: saved\ndata: {{\"id\": \"{review_id}\"}}\n\n"
+                        yield f"event: persisted\ndata: {{\"id\": \"{review_id}\"}}\n\n"
+                except Exception as save_err:
+                    logger.warning("Could not persist review to Supabase: %s", save_err)
 
         except Exception as exc:
             logger.exception("Review stream generator failed")

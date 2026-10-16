@@ -1,0 +1,1452 @@
+{
+  "total_prs": 19,
+  "avg_precision": 0.3274,
+  "avg_recall": 0.4772,
+  "avg_f1": 0.3322,
+  "avg_severity_weighted": 0.4575,
+  "results": [
+    {
+      "pr_number": 8109,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1_score": 0.0,
+      "severity_weighted_score": 0.0,
+      "human_findings_count": 1,
+      "prism_findings_count": 13,
+      "prism_findings": [
+        {
+          "file": "examples/delta-channel-dump/dump.py",
+          "line_start": 280,
+          "severity": "MEDIUM",
+          "message": "The `walk_channel` function performs a synchronous database query inside a loop for every checkpoint in the parent chain. For long-running threads with many checkpoints, this will cause an N+1 query performance issue. Consider fetching the entire chain metadata in a single query or using a recursive CTE to retrieve the parent chain IDs first."
+        },
+        {
+          "file": "examples/delta-channel-dump/dump.py",
+          "line_start": 435,
+          "severity": "MEDIUM",
+          "message": "A03 — Injection: The `thread_id` is passed directly to `resolve_target_checkpoint_id` and used in SQL queries. While `uuid.UUID(args.thread_id)` provides some validation, ensure that all inputs used in SQL queries are strictly validated or parameterized to prevent potential SQL injection if the input source changes."
+        },
+        {
+          "file": "examples/delta-channel-dump/dump.py",
+          "line_start": 46,
+          "severity": "MEDIUM",
+          "message": "The `ext_hook` function contains significant code duplication across different EXT types. Consider refactoring the repeated `try-except` blocks and `ormsgpack.unpackb` calls into a helper function or a dictionary-based dispatch table."
+        },
+        {
+          "file": "examples/delta-channel-dump/dump.py",
+          "line_start": 446,
+          "severity": "LOW",
+          "message": "The `json.dumps` call uses `default=json_default`. If `json_default` encounters an object it cannot serialize (e.g., a complex custom object not covered by the current logic), it raises a `TypeError`. While this is acceptable for a CLI tool, it would be safer to include a fallback that converts unknown types to their string representation to prevent the script from crashing during the final output generation."
+        },
+        {
+          "file": "examples/delta-channel-dump/dump.py",
+          "line_start": 441,
+          "severity": "LOW",
+          "message": "A01 — Broken Access Control: The script connects to the database using a URI provided via environment variable or CLI argument. Ensure that the database user provided has the minimum necessary privileges (e.g., read-only access to the specific tables) to follow the principle of least privilege."
+        },
+        {
+          "file": "examples/delta-channel-dump/dump.py",
+          "line_start": 115,
+          "severity": "LOW",
+          "message": "The `decode_blob` function raises a `RuntimeError` if an unknown blob type is encountered. While this is acceptable for a v1 script, it would be more robust to log a warning and return `None` or a placeholder object, allowing the user to inspect the rest of the state rather than crashing the entire dump process."
+        },
+        {
+          "file": "examples/delta-channel-dump/dump.py",
+          "line_start": 448,
+          "severity": "LOW",
+          "message": "The script uses `json.dumps` with `indent=2`. For very large thread states, this can result in massive output files. Consider adding a `--compact` flag to allow for minified JSON output."
+        },
+        {
+          "file": "examples/delta-channel-dump/dump.py",
+          "line_start": 136,
+          "severity": "LOW",
+          "message": "The `json_default` function uses `bytes(obj)` which might be ambiguous for `bytearray`. Explicitly checking types or using `memoryview` might be safer."
+        },
+        {
+          "file": "examples/delta-channel-dump/dump.py",
+          "line_start": 447,
+          "severity": "LOW",
+          "message": "The file writing logic is slightly repetitive. Consider using `sys.stdout` directly as a file-like object to unify the output path handling."
+        },
+        {
+          "file": "examples/delta-channel-dump/dump.py",
+          "line_start": 435,
+          "severity": "SUGGESTION",
+          "message": "The `walk_parent_chain` function is called after `resolve_target_checkpoint_id`. If `walk_parent_chain` fails (e.g., due to a missing parent), the database connection remains open until the end of the `with` block. It is better to wrap the logic in a try-finally or ensure the connection is closed immediately upon encountering a fatal error."
+        },
+        {
+          "file": "examples/delta-channel-dump/dump.py",
+          "line_start": 457,
+          "severity": "SUGGESTION",
+          "message": "A09 — Logging Failures: The script writes the output to a file or stdout. If this script is run in an automated environment, ensure that the output (which may contain sensitive application state/messages) is handled according to organizational data retention and privacy policies."
+        },
+        {
+          "file": "examples/delta-channel-dump/dump.py",
+          "line_start": 423,
+          "severity": "SUGGESTION",
+          "message": "The `main` function uses `psycopg.connect` without specifying a timeout or connection parameters. In production environments with potentially large databases, adding `connect_timeout` or using a connection pooler would improve reliability."
+        },
+        {
+          "file": "examples/delta-channel-dump/dump.py",
+          "line_start": 42,
+          "severity": "SUGGESTION",
+          "message": "Consider using a constant for the magic number 7 (EXT_DELTA_SNAPSHOT) if it is used elsewhere, or ensure it is clearly documented as the LangGraph protocol version."
+        }
+      ],
+      "human_comments": [
+        {
+          "body": "i think you mean langgraph <1.2?",
+          "file": "examples/delta-channel-dump/README.md",
+          "line": 1,
+          "reviewer": "sydney-runkle",
+          "created_at": "2026-06-17T13:28:55+00:00"
+        }
+      ]
+    },
+    {
+      "pr_number": 8053,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1_score": 0.0,
+      "severity_weighted_score": 0.0,
+      "human_findings_count": 3,
+      "prism_findings_count": 0,
+      "prism_findings": [],
+      "human_comments": [
+        {
+          "body": "can we put these guys in a list somewhere, this feels kinda gross\ni think they already might be somehwere together",
+          "file": "libs/langgraph/langgraph/_internal/_config.py",
+          "line": 1,
+          "reviewer": "sydney-runkle",
+          "created_at": "2026-06-12T16:03:42+00:00"
+        },
+        {
+          "body": "did we not have these codified alreadY?",
+          "file": "libs/langgraph/langgraph/_internal/_config.py",
+          "line": 4,
+          "reviewer": "sydney-runkle",
+          "created_at": "2026-06-17T12:40:09+00:00"
+        },
+        {
+          "body": "nope!",
+          "file": "libs/langgraph/langgraph/_internal/_config.py",
+          "line": 4,
+          "reviewer": "nick-hollon-lc",
+          "created_at": "2026-06-17T14:05:24+00:00"
+        }
+      ]
+    },
+    {
+      "pr_number": 8023,
+      "precision": 0.375,
+      "recall": 0.6,
+      "f1_score": 0.4615,
+      "severity_weighted_score": 0.5455,
+      "human_findings_count": 5,
+      "prism_findings_count": 8,
+      "prism_findings": [
+        {
+          "file": "libs/cli/langgraph_cli/config.py",
+          "line_start": 250,
+          "severity": "MEDIUM",
+          "message": "The _resolve_compatible_api_version function performs a network request (httpx.get) to PyPI every time a docker tag is generated. This can lead to significant latency, rate-limiting issues, and failures in offline environments. Consider implementing a cache for the PyPI version list."
+        },
+        {
+          "file": "libs/cli/langgraph_cli/config.py",
+          "line_start": 133,
+          "severity": "MEDIUM",
+          "message": "A05: Security Misconfiguration. The _get_pypi_versions function performs an external network request to pypi.org without explicit error handling for potential DNS hijacking or man-in-the-middle attacks. While the timeout is set, consider pinning the expected response structure or using a secure, verified source if this CLI is intended for high-security environments."
+        },
+        {
+          "file": "libs/cli/langgraph_cli/config.py",
+          "line_start": 232,
+          "severity": "MEDIUM",
+          "message": "The `_get_pypi_versions` function performs a network request without a retry mechanism. Given this is part of a CLI command that might be run in CI/CD environments, transient network failures could cause unnecessary build failures. Consider adding a simple retry strategy using a library like `tenacity` or a basic loop."
+        },
+        {
+          "file": "libs/cli/langgraph_cli/config.py",
+          "line_start": 230,
+          "severity": "LOW",
+          "message": "The _get_pypi_versions function does not verify the structure of the JSON response beyond checking if 'releases' is a dict. If the PyPI API response format changes or returns unexpected data, the code might crash or behave unpredictably. Adding schema validation or more robust error handling is recommended."
+        },
+        {
+          "file": "libs/cli/langgraph_cli/config.py",
+          "line_start": 288,
+          "severity": "LOW",
+          "message": "The use of `max()` on a list of candidates without checking if the list is empty is technically safe here due to the preceding `if not candidates:` check, but it relies on non-local control flow. Consider using a more explicit approach to ensure the list is not empty before calling `max`."
+        },
+        {
+          "file": "libs/cli/langgraph_cli/config.py",
+          "line_start": 240,
+          "severity": "LOW",
+          "message": "The `_get_pypi_versions` function assumes the JSON response structure is always valid. If the PyPI API changes or returns an unexpected format, `payload.get(\"releases\", {})` might return something other than a dict, leading to a `TypeError` later when iterating. Adding a schema validation or explicit type check is safer."
+        },
+        {
+          "file": "libs/cli/langgraph_cli/config.py",
+          "line_start": 242,
+          "severity": "LOW",
+          "message": "The error message for invalid PyPI response is generic. Consider including the status code or response snippet for better debugging."
+        },
+        {
+          "file": "libs/cli/langgraph_cli/config.py",
+          "line_start": 289,
+          "severity": "LOW",
+          "message": "The error message for no matching candidates could be more helpful by listing the available versions or the range that was requested."
+        }
+      ],
+      "human_comments": [
+        {
+          "body": "nit: we should probably update to say latest stable version\n```suggestion\n        \"latest stable version will be used. Compatible ranges like ~=0.11.0.dev5 \"\n```",
+          "file": "libs/cli/langgraph_cli/cli.py",
+          "line": 1,
+          "reviewer": "jdrogers940",
+          "created_at": "2026-06-09T16:55:46+00:00"
+        },
+        {
+          "body": "Maybe just clarify with an example? The first one would resolve to 0.11.0.dev6 when it comes out right? Whereas the second one would stay 0.11.0.dev5 until 0.11.0 comes out, then resolve to that?",
+          "file": "libs/cli/langgraph_cli/cli.py",
+          "line": 1,
+          "reviewer": "jdrogers940",
+          "created_at": "2026-06-09T16:57:07+00:00"
+        },
+        {
+          "body": "nit: drop these?",
+          "file": "libs/cli/langgraph_cli/config.py",
+          "line": 1,
+          "reviewer": "jdrogers940",
+          "created_at": "2026-06-09T17:00:57+00:00"
+        },
+        {
+          "body": "I think we can drop this",
+          "file": "libs/cli/langgraph_cli/config.py",
+          "line": 1,
+          "reviewer": "jdrogers940",
+          "created_at": "2026-06-09T17:08:59+00:00"
+        },
+        {
+          "body": "So right now we get these versions from pypi in the inmem CLI. Probably better to keep those in line? Would think also easier to parse cause it's just versions vs. the weird tag formats we've got.",
+          "file": "libs/cli/langgraph_cli/config.py",
+          "line": 1,
+          "reviewer": "jdrogers940",
+          "created_at": "2026-06-09T17:18:56+00:00"
+        }
+      ]
+    },
+    {
+      "pr_number": 8064,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1_score": 0.0,
+      "severity_weighted_score": 0.0,
+      "human_findings_count": 1,
+      "prism_findings_count": 0,
+      "prism_findings": [],
+      "human_comments": [
+        {
+          "body": "```suggestion\n`langgraph-prebuilt` provides an [implementation](https://reference.langchain.com/python/langgraph.prebuilt/chat_agent_executor/create_react_agent) of a tool-calling ReAct-style agent - `create_react_agent`:\n```",
+          "file": "libs/prebuilt/README.md",
+          "line": 1,
+          "reviewer": "mdrxy",
+          "created_at": "2026-06-12T23:16:13+00:00"
+        }
+      ]
+    },
+    {
+      "pr_number": 8011,
+      "precision": 0.5,
+      "recall": 0.4,
+      "f1_score": 0.4444,
+      "severity_weighted_score": 1.0,
+      "human_findings_count": 5,
+      "prism_findings_count": 4,
+      "prism_findings": [
+        {
+          "file": "libs/langgraph/langgraph/pregel/main.py",
+          "line_start": 2000,
+          "severity": "SUGGESTION",
+          "message": "The logic to determine `has_delta_writes` is duplicated in both `perform_superstep` and `aperform_superstep`. Consider extracting this into a helper function to adhere to DRY principles."
+        },
+        {
+          "file": "libs/langgraph/langgraph/pregel/main.py",
+          "line_start": 2466,
+          "severity": "SUGGESTION",
+          "message": "The logic to determine `has_delta_writes` is duplicated in both `perform_superstep` and `aperform_superstep`. Consider extracting this into a helper function to adhere to DRY principles."
+        },
+        {
+          "file": "libs/langgraph/tests/test_delta_channel_update_state.py",
+          "line_start": 34,
+          "severity": "SUGGESTION",
+          "message": "The `_build_graph` helper function is missing type annotations for its return value. It should be annotated as `CompiledGraph` or similar to improve type safety."
+        },
+        {
+          "file": "libs/langgraph/tests/test_delta_channel_update_state.py",
+          "line_start": 213,
+          "severity": "SUGGESTION",
+          "message": "Avoid importing inside a function (`from langgraph.types import StateUpdate`). Move this import to the top of the file."
+        }
+      ],
+      "human_comments": [
+        {
+          "body": "is this really like should_put_writes?",
+          "file": "libs/langgraph/langgraph/pregel/main.py",
+          "line": 1,
+          "reviewer": "sydney-runkle",
+          "created_at": "2026-06-09T15:14:20+00:00"
+        },
+        {
+          "body": "when would saved not be `None` heree?",
+          "file": "libs/langgraph/langgraph/pregel/main.py",
+          "line": 19,
+          "reviewer": "sydney-runkle",
+          "created_at": "2026-06-09T15:15:12+00:00"
+        },
+        {
+          "body": "updateState call could provide a checkpoint to load, so that updateState will use as parent checkpoint to write the next one. see line 1644 `saved = checkpointer.get_tuple(config)`.",
+          "file": "libs/langgraph/langgraph/pregel/main.py",
+          "line": 19,
+          "reviewer": "longquanzheng",
+          "created_at": "2026-06-09T15:45:32+00:00"
+        },
+        {
+          "body": "yeah renamed",
+          "file": "libs/langgraph/langgraph/pregel/main.py",
+          "line": 1,
+          "reviewer": "longquanzheng",
+          "created_at": "2026-06-09T15:46:10+00:00"
+        },
+        {
+          "body": "that's intentional. ",
+          "file": "libs/langgraph/langgraph/pregel/main.py",
+          "line": 31,
+          "reviewer": "longquanzheng",
+          "created_at": "2026-06-09T15:46:25+00:00"
+        }
+      ]
+    },
+    {
+      "pr_number": 7928,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1_score": 0.0,
+      "severity_weighted_score": 0.0,
+      "human_findings_count": 11,
+      "prism_findings_count": 0,
+      "prism_findings": [],
+      "human_comments": [
+        {
+          "body": "nit, this is really filtering out internal LG/LC tags right?",
+          "file": "libs/langgraph/langgraph/_internal/_config.py",
+          "line": 1,
+          "reviewer": "sydney-runkle",
+          "created_at": "2026-05-29T18:52:15+00:00"
+        },
+        {
+          "body": "walruses make me happy",
+          "file": "libs/langgraph/langgraph/pregel/_messages.py",
+          "line": 1,
+          "reviewer": "sydney-runkle",
+          "created_at": "2026-05-29T18:52:27+00:00"
+        },
+        {
+          "body": "why do we need to wrap in dict",
+          "file": "libs/langgraph/langgraph/pregel/debug.py",
+          "line": 1,
+          "reviewer": "sydney-runkle",
+          "created_at": "2026-05-29T18:52:43+00:00"
+        },
+        {
+          "body": "for the other one (messages), we put the tags in the metadata, can we do the same here",
+          "file": "libs/langgraph/langgraph/pregel/debug.py",
+          "line": 44,
+          "reviewer": "sydney-runkle",
+          "created_at": "2026-05-29T18:53:26+00:00"
+        },
+        {
+          "body": "curious, what does this look like here?",
+          "file": "libs/langgraph/tests/test_large_cases.py",
+          "line": 1,
+          "reviewer": "sydney-runkle",
+          "created_at": "2026-05-29T18:54:25+00:00"
+        },
+        {
+          "body": "not blocking this PR, but i don't like the structure of `LifecycleCause`, the send + edge ones make total sense for langgraph workflows, tool call is a bit odd, would love to thread that info through in another way, but here we are",
+          "file": "libs/langgraph/langgraph/stream/transformers.py",
+          "line": 5,
+          "reviewer": "sydney-runkle",
+          "created_at": "2026-05-29T18:58:54+00:00"
+        },
+        {
+          "body": "it would be nicer if lifecycle had metadata and we just put the tool call id in metadata instead of saying \"cause\" but i'd want to do that in a separate PR because it touches a lot more",
+          "file": "libs/langgraph/langgraph/stream/transformers.py",
+          "line": 5,
+          "reviewer": "nick-hollon-lc",
+          "created_at": "2026-05-29T19:08:42+00:00"
+        },
+        {
+          "body": "i think it is in there md = metadata",
+          "file": "libs/langgraph/langgraph/pregel/debug.py",
+          "line": 44,
+          "reviewer": "nick-hollon-lc",
+          "created_at": "2026-05-29T20:17:37+00:00"
+        },
+        {
+          "body": "defensive copy so we don't mutate it later on accident",
+          "file": "libs/langgraph/langgraph/pregel/debug.py",
+          "line": 1,
+          "reviewer": "nick-hollon-lc",
+          "created_at": "2026-05-29T20:21:38+00:00"
+        },
+        {
+          "body": "{\r\n    \"langgraph_step\": 1,\r\n    \"langgraph_node\": \"rewrite_query\",\r\n    \"langgraph_triggers\": (\"branch:to:rewrite_query\",),\r\n    \"langgraph_path\": (\"__pregel_pull\", \"rewrite_query\"),\r\n    \"langgraph_checkpoint_ns\": \"rewrite_query:<uuid>\",\r\n    \"checkpoint_ns\": \"\",\r\n    \"thread_id\": \"<uuid>\",\r\n}\r\n\r\nbut asserted as any object because the values are non deterministic",
+          "file": "libs/langgraph/tests/test_large_cases.py",
+          "line": 1,
+          "reviewer": "nick-hollon-lc",
+          "created_at": "2026-05-29T20:22:29+00:00"
+        },
+        {
+          "body": "renamed as filter_to_user_tags",
+          "file": "libs/langgraph/langgraph/_internal/_config.py",
+          "line": 1,
+          "reviewer": "nick-hollon-lc",
+          "created_at": "2026-05-29T20:22:43+00:00"
+        }
+      ]
+    },
+    {
+      "pr_number": 7978,
+      "precision": 0.4,
+      "recall": 1.0,
+      "f1_score": 0.5714,
+      "severity_weighted_score": 0.8,
+      "human_findings_count": 2,
+      "prism_findings_count": 5,
+      "prism_findings": [
+        {
+          "file": "libs/langgraph/langgraph/pregel/main.py",
+          "line_start": 3278,
+          "severity": "MEDIUM",
+          "message": "The `stream` method (sync) contains a large block of duplicated logic from `astream` (async). Specifically, the setup of `stream_writer`, `parent_runtime`, and `server_info` is identical. Consider extracting these into a shared helper method to adhere to DRY principles."
+        },
+        {
+          "file": "libs/langgraph/langgraph/pregel/main.py",
+          "line_start": 3078,
+          "severity": "LOW",
+          "message": "The `stream_writer` function is defined multiple times within `astream` (lines 3078 and 3103). While this is valid Python, it is confusing. Consider refactoring the logic to define `stream_writer` once outside the conditional blocks."
+        },
+        {
+          "file": "libs/sdk-py/integration/graph/factory_graph.py",
+          "line_start": 42,
+          "severity": "LOW",
+          "message": "The import of `_ExecutionRuntime` and `_ReadRuntime` inside `make_graph` is fine for a fixture, but ensure these internal modules are intended to be accessed this way. If they are private, consider if there's a public API alternative."
+        },
+        {
+          "file": "libs/langgraph/langgraph/pregel/main.py",
+          "line_start": 4257,
+          "severity": "SUGGESTION",
+          "message": "The docstring for `_coerce_parent_runtime` is helpful, but consider adding a type hint for the return value's generic parameter if possible, or explicitly documenting that `Runtime[Any]` is returned to clarify the `Any` usage."
+        },
+        {
+          "file": "libs/sdk-py/tests/integration/test_factory_graph.py",
+          "line_start": 21,
+          "severity": "SUGGESTION",
+          "message": "The helper functions `_async_runs` and `_sync_runs` are defined inside the test file. If these are used across multiple test files, consider moving them to a shared utility module in `libs/sdk-py/tests/integration/`."
+        }
+      ],
+      "human_comments": [
+        {
+          "body": "i don't think we need to take store off it, that should be passed to graph directly\ni presume the rest of the merging happens appropriately then?\ncan we test that context set at the graph level (like LG API does) is plumbed through?",
+          "file": "libs/langgraph/langgraph/pregel/main.py",
+          "line": 1,
+          "reviewer": "sydney-runkle",
+          "created_at": "2026-06-02T15:37:49+00:00"
+        },
+        {
+          "body": "(the test doesn't check context plumbed through)",
+          "file": "libs/langgraph/langgraph/pregel/main.py",
+          "line": 1,
+          "reviewer": "sydney-runkle",
+          "created_at": "2026-06-02T15:38:36+00:00"
+        }
+      ]
+    },
+    {
+      "pr_number": 7927,
+      "precision": 0.3333,
+      "recall": 0.2857,
+      "f1_score": 0.3077,
+      "severity_weighted_score": 0.6667,
+      "human_findings_count": 7,
+      "prism_findings_count": 6,
+      "prism_findings": [
+        {
+          "file": "libs/langgraph/langgraph/pregel/remote.py",
+          "line_start": 192,
+          "severity": "MEDIUM",
+          "message": "The `_reject_v3_unsupported` method performs manual iteration over arguments. This could be refactored into a more generic validation helper or a decorator if similar validation logic is needed elsewhere."
+        },
+        {
+          "file": "libs/langgraph/langgraph/pregel/_remote_run_stream.py",
+          "line_start": 124,
+          "severity": "LOW",
+          "message": "The `_ProjectionRegistry` class uses a tuple `_TYPED` and `_DECODED`. Consider using a `NamedTuple` or `Enum` if these categories grow, to improve type safety and readability."
+        },
+        {
+          "file": "libs/langgraph/langgraph/pregel/remote.py",
+          "line_start": 1000,
+          "severity": "LOW",
+          "message": "The `stream_events` method signature is quite long. Consider grouping the optional parameters into a configuration object or using a more concise way to handle the `version='v3'` specific arguments."
+        },
+        {
+          "file": "libs/langgraph/tests/test_remote_graph_v3.py",
+          "line_start": 409,
+          "severity": "LOW",
+          "message": "The `_make_remote_graph` helper is simple but could be replaced with a `pytest.fixture` to leverage dependency injection and improve test setup clarity."
+        },
+        {
+          "file": "libs/langgraph/langgraph/pregel/_remote_run_stream.py",
+          "line_start": 23,
+          "severity": "SUGGESTION",
+          "message": "The function `_translate_command_input` could be simplified by using a guard clause to return `input` early, reducing indentation for the main logic."
+        },
+        {
+          "file": "libs/langgraph/tests/test_remote_graph_v3.py",
+          "line_start": 21,
+          "severity": "SUGGESTION",
+          "message": "The `_make_sync_adapter` helper function is used extensively. Consider moving it to a `conftest.py` or a dedicated test utility module if it is intended to be reused across multiple test files."
+        }
+      ],
+      "human_comments": [
+        {
+          "body": "why not async?",
+          "file": "libs/langgraph/langgraph/pregel/remote.py",
+          "line": 1,
+          "reviewer": "sydney-runkle",
+          "created_at": "2026-05-29T14:56:23+00:00"
+        },
+        {
+          "body": "also we dropped some args?",
+          "file": "libs/langgraph/langgraph/pregel/remote.py",
+          "line": 1,
+          "reviewer": "sydney-runkle",
+          "created_at": "2026-05-29T14:56:36+00:00"
+        },
+        {
+          "body": "seems kinda odd that we need this, haven't thought deeply about it though",
+          "file": "libs/langgraph/langgraph/pregel/remote.py",
+          "line": 1,
+          "reviewer": "sydney-runkle",
+          "created_at": "2026-05-29T14:57:39+00:00"
+        },
+        {
+          "body": "definitely should be async! args got dropped because the signature didn't match the local stream_events signature. it isn't implemented for v1/v2 anyway so ok if we make the signatures match",
+          "file": "libs/langgraph/langgraph/pregel/remote.py",
+          "line": 1,
+          "reviewer": "nick-hollon-lc",
+          "created_at": "2026-05-29T15:15:20+00:00"
+        },
+        {
+          "body": "SDK takes a dict but the conversion should probably happen closer to where it's called and maybe even in SDK. i will check what the existing SDK methods do",
+          "file": "libs/langgraph/langgraph/pregel/remote.py",
+          "line": 1,
+          "reviewer": "nick-hollon-lc",
+          "created_at": "2026-05-29T15:16:45+00:00"
+        },
+        {
+          "body": "fixed this so it takes Command ",
+          "file": "libs/langgraph/langgraph/pregel/remote.py",
+          "line": 1,
+          "reviewer": "nick-hollon-lc",
+          "created_at": "2026-05-29T20:44:11+00:00"
+        },
+        {
+          "body": "fixed this too",
+          "file": "libs/langgraph/langgraph/pregel/remote.py",
+          "line": 1,
+          "reviewer": "nick-hollon-lc",
+          "created_at": "2026-05-29T20:44:25+00:00"
+        }
+      ]
+    },
+    {
+      "pr_number": 7939,
+      "precision": 0.8333,
+      "recall": 0.8333,
+      "f1_score": 0.8333,
+      "severity_weighted_score": 1.0,
+      "human_findings_count": 6,
+      "prism_findings_count": 6,
+      "prism_findings": [
+        {
+          "file": "libs/cli/langgraph_cli/dependency_tracking.py",
+          "line_start": 123,
+          "severity": "MEDIUM",
+          "message": "The `_read_text` call for `requirements.txt` is missing a check for whether the file exists or is readable before attempting to read it, although `_read_text` handles `OSError`. However, `base / 'requirements.txt'` might not exist in many projects. This is acceptable, but ensure that the logic doesn't inadvertently mask permission errors if the file exists but is unreadable."
+        },
+        {
+          "file": "libs/cli/langgraph_cli/dependency_tracking.py",
+          "line_start": 108,
+          "severity": "LOW",
+          "message": "The expression 'config_json.get(\"dependencies\") or [\".\"]' assumes 'dependencies' is a list. If the config file is malformed (e.g., 'dependencies' is a string), this might lead to unexpected behavior. Consider adding a type check or validation."
+        },
+        {
+          "file": "libs/cli/tests/unit_tests/test_dependency_tracking.py",
+          "line_start": 11,
+          "severity": "LOW",
+          "message": "The _write_project helper function is quite large. While it serves the tests well, consider splitting it if more complex project structures need to be tested in the future."
+        },
+        {
+          "file": "libs/cli/langgraph_cli/dependency_tracking.py",
+          "line_start": 46,
+          "severity": "SUGGESTION",
+          "message": "The `_read_text` function uses `open(path, 'rb')` but then decodes with `utf-8`. While `errors='replace'` handles invalid sequences, it is safer to use `path.read_text(encoding='utf-8', errors='replace')` directly, which also handles the file opening/closing context management more idiomatically."
+        },
+        {
+          "file": "libs/cli/langgraph_cli/dependency_tracking.py",
+          "line_start": 135,
+          "severity": "SUGGESTION",
+          "message": "The `found` dictionary is populated inside the loop. If a package is found in multiple dependency paths, the current logic keeps the version from the first path encountered. If the intention is to prefer specific locations (e.g., root over sub-directories), the order of `dep_paths` should be explicitly documented or handled."
+        },
+        {
+          "file": "libs/cli/langgraph_cli/deploy.py",
+          "line_start": 1604,
+          "severity": "SUGGESTION",
+          "message": "The try-except block around 'find_tracked_packages' is good practice, but consider logging the full traceback in debug mode or using a more specific exception type if possible to avoid catching unrelated system errors."
+        }
+      ],
+      "human_comments": [
+        {
+          "body": "i would double check that we are not examining dependencies in any other code paths in the cli, we may already do this elsewhere",
+          "file": "libs/cli/langgraph_cli/dependency_tracking.py",
+          "line": 98,
+          "reviewer": "hari-dhanushkodi",
+          "created_at": "2026-05-29T04:40:04+00:00"
+        },
+        {
+          "body": "double checking - will we support things like `>=1.0.0, <2.0.0` for eg?",
+          "file": "libs/cli/langgraph_cli/deploy.py",
+          "line": 64,
+          "reviewer": "hari-dhanushkodi",
+          "created_at": "2026-05-29T04:44:10+00:00"
+        },
+        {
+          "body": "edge case - but this is a bit odd? what if the file is malformed now, because we are cutting off at an arbitrary point?",
+          "file": "libs/cli/langgraph_cli/dependency_tracking.py",
+          "line": 55,
+          "reviewer": "hari-dhanushkodi",
+          "created_at": "2026-05-29T04:47:27+00:00"
+        },
+        {
+          "body": "I tried looking for it, but couldn't find one ",
+          "file": "libs/cli/langgraph_cli/dependency_tracking.py",
+          "line": 98,
+          "reviewer": "syachamaneni-lc",
+          "created_at": "2026-05-29T19:04:07+00:00"
+        },
+        {
+          "body": "yeah, we have tests for that as well",
+          "file": "libs/cli/langgraph_cli/deploy.py",
+          "line": 64,
+          "reviewer": "syachamaneni-lc",
+          "created_at": "2026-05-29T20:10:59+00:00"
+        },
+        {
+          "body": "This is just best effort. We shouldn't be allocating >= 5 MiB anyways for files like this.",
+          "file": "libs/cli/langgraph_cli/dependency_tracking.py",
+          "line": 55,
+          "reviewer": "syachamaneni-lc",
+          "created_at": "2026-05-29T20:12:52+00:00"
+        }
+      ]
+    },
+    {
+      "pr_number": 7913,
+      "precision": 0.6,
+      "recall": 1.0,
+      "f1_score": 0.75,
+      "severity_weighted_score": 0.9231,
+      "human_findings_count": 3,
+      "prism_findings_count": 5,
+      "prism_findings": [
+        {
+          "file": "libs/langgraph/langgraph/pregel/_messages.py",
+          "line_start": 448,
+          "severity": "MEDIUM",
+          "message": "The `ensure_message_ids` function uses `convert_to_messages([item])[0]` inside a loop. If `convert_to_messages` returns an empty list (e.g., due to an unexpected dict format that doesn't map to a message), this will raise an `IndexError`. Consider adding a check for the length of the returned list before accessing index 0."
+        },
+        {
+          "file": "libs/langgraph/langgraph/pregel/_messages.py",
+          "line_start": 445,
+          "severity": "MEDIUM",
+          "message": "The `ensure_message_ids` function uses `convert_to_messages([item])[0]` inside a loop. `convert_to_messages` is a relatively expensive operation that performs validation and schema conversion. If the list is large, this will significantly degrade performance. Consider checking if the dict already has an ID before converting, or batching the conversion if possible."
+        },
+        {
+          "file": "libs/langgraph/langgraph/pregel/_messages.py",
+          "line_start": 426,
+          "severity": "LOW",
+          "message": "The `ensure_message_ids` function performs in-place mutation of dictionaries and lists. While the docstring claims this is safe because it happens before the background thread serializes the data, it is a side-effect-heavy pattern. Ensure that the `writes` objects passed to this function are not reused elsewhere in the application state, as this mutation will be visible globally."
+        },
+        {
+          "file": "libs/langgraph/langgraph/pregel/_messages.py",
+          "line_start": 435,
+          "severity": "LOW",
+          "message": "The `ensure_message_ids` function uses `uuid4()` to generate IDs. While generally safe, ensure that the `uuid` module is imported. The provided diff does not show the import statement for `uuid4` in `libs/langgraph/langgraph/pregel/_messages.py`."
+        },
+        {
+          "file": "libs/langgraph/langgraph/pregel/_loop.py",
+          "line_start": 454,
+          "severity": "SUGGESTION",
+          "message": "The loop `for c, v in writes_to_save:` iterates over `writes_to_save`, but the variable `writes_to_save` is not defined in the provided snippet. It is likely intended to be `writes` or a filtered version of it. Please verify the variable name."
+        }
+      ],
+      "human_comments": [
+        {
+          "body": "any other shapes we need to handle?",
+          "file": "libs/langgraph/langgraph/pregel/_messages.py",
+          "line": 49,
+          "reviewer": "eyurtsev",
+          "created_at": "2026-05-26T16:48:15+00:00"
+        },
+        {
+          "body": "are values guarnatees to be BaseMessage we don't have to worry about dict like representation?",
+          "file": "libs/langgraph/langgraph/pregel/_messages.py",
+          "line": 29,
+          "reviewer": "eyurtsev",
+          "created_at": "2026-05-26T16:48:29+00:00"
+        },
+        {
+          "body": "Can value only be BaseMessage or list at this level? Do we need to worry about dict-like Message for value or a dict for value with nested messages?",
+          "file": "libs/langgraph/langgraph/pregel/_messages.py",
+          "line": 49,
+          "reviewer": "eyurtsev",
+          "created_at": "2026-05-26T17:29:50+00:00"
+        }
+      ]
+    },
+    {
+      "pr_number": 7730,
+      "precision": 0.375,
+      "recall": 1.0,
+      "f1_score": 0.5455,
+      "severity_weighted_score": 0.4286,
+      "human_findings_count": 3,
+      "prism_findings_count": 8,
+      "prism_findings": [
+        {
+          "file": "libs/langgraph/langgraph/pregel/_loop.py",
+          "line_start": 1046,
+          "severity": "CRITICAL",
+          "message": "The synthetic task ID format 'f\"{step:08d}-{tid}\"' is inconsistent with the `exit_delta_task_id` helper function used in the original diff context (which is not defined in the provided code but implied to exist). This will cause mismatching task IDs during checkpoint reconstruction/ancestor walks. Use the shared helper function instead of hardcoding the format string."
+        },
+        {
+          "file": "libs/langgraph/langgraph/pregel/_loop.py",
+          "line_start": 1407,
+          "severity": "HIGH",
+          "message": "The `_checkpointer_put_after_previous` method uses `concurrent.futures.wait(futs)` which is a blocking call. In an async context (AsyncPregelLoop), this will block the entire event loop, potentially causing deadlocks or severe performance degradation. Use `await asyncio.gather(*futs)` for async loops."
+        },
+        {
+          "file": "libs/langgraph/langgraph/pregel/_loop.py",
+          "line_start": 1005,
+          "severity": "MEDIUM",
+          "message": "The `new_counts` dictionary is updated in-place after the `create_checkpoint` call. If `create_checkpoint` or any subsequent logic fails, the state of `self.checkpoint_metadata` may be left in an inconsistent state. Consider performing the reset logic before the checkpoint creation or ensuring atomicity."
+        },
+        {
+          "file": "libs/langgraph/langgraph/pregel/_loop.py",
+          "line_start": 1002,
+          "severity": "LOW",
+          "message": "The `channels_to_snapshot` set is computed but not explicitly validated against the `channels` mapping. While `delta_channels_to_snapshot` handles this, the loop logic assumes `self.channels` remains stable. If `self.channels` is modified concurrently, this could lead to key errors."
+        },
+        {
+          "file": "libs/langgraph/langgraph/pregel/_loop.py",
+          "line_start": 1030,
+          "severity": "LOW",
+          "message": "The loop `for k in channels_to_snapshot: new_counts[k] = 0` is clear, but could be replaced with `new_counts.update({k: 0 for k in channels_to_snapshot})` for a more idiomatic Python approach."
+        },
+        {
+          "file": "libs/langgraph/langgraph/pregel/_checkpoint.py",
+          "line_start": 45,
+          "severity": "LOW",
+          "message": "The list comprehension in `delta_channels_to_snapshot` is readable, but consider adding a comment or breaking it down if the logic for `is_available()` or `snapshot_frequency` becomes more complex in the future."
+        },
+        {
+          "file": "libs/langgraph/langgraph/pregel/_loop.py",
+          "line_start": 1150,
+          "severity": "SUGGESTION",
+          "message": "Consider using `f'{step:08d}-{tid}'` consistently or defining a helper function for synthetic task ID generation to improve readability and maintainability."
+        },
+        {
+          "file": "libs/langgraph/tests/test_delta_channel_exit_mode.py",
+          "line_start": 23,
+          "severity": "SUGGESTION",
+          "message": "The `_build_graph` function uses `Any` for the return type. Consider using `CompiledGraph` or a more specific type hint if available to improve type safety."
+        }
+      ],
+      "human_comments": [
+        {
+          "body": "don't love changing return type here, as seen in tests this is technically breaking, but as far as i can tell this one is an internal util",
+          "file": "libs/langgraph/langgraph/pregel/_checkpoint.py",
+          "line": 75,
+          "reviewer": "sydney-runkle",
+          "created_at": "2026-05-07T15:46:36+00:00"
+        },
+        {
+          "body": "should we address this?",
+          "file": "libs/langgraph/langgraph/pregel/_loop.py",
+          "line": 104,
+          "reviewer": "sydney-runkle",
+          "created_at": "2026-05-07T15:48:00+00:00"
+        },
+        {
+          "body": "yes I wanted, that's why I left a TODO. but worried that you don't want to change anything unreleated to delta channel. \r\n\r\nYou want me to do in this PR or an diff PR?",
+          "file": "libs/langgraph/langgraph/pregel/_loop.py",
+          "line": 104,
+          "reviewer": "longquanzheng",
+          "created_at": "2026-05-07T16:16:46+00:00"
+        }
+      ]
+    },
+    {
+      "pr_number": 7882,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1_score": 0.0,
+      "severity_weighted_score": 0.0,
+      "human_findings_count": 3,
+      "prism_findings_count": 0,
+      "prism_findings": [],
+      "human_comments": [
+        {
+          "body": "shouldn't we just have this?",
+          "file": "libs/langgraph/langgraph/stream/_mux.py",
+          "line": 1,
+          "reviewer": "sydney-runkle",
+          "created_at": "2026-05-21T15:27:31+00:00"
+        },
+        {
+          "body": "could hopefully do inline if so?",
+          "file": "libs/langgraph/langgraph/stream/_mux.py",
+          "line": 1,
+          "reviewer": "sydney-runkle",
+          "created_at": "2026-05-21T15:28:29+00:00"
+        },
+        {
+          "body": "done inline",
+          "file": "libs/langgraph/langgraph/stream/_mux.py",
+          "line": 1,
+          "reviewer": "nick-hollon-lc",
+          "created_at": "2026-05-21T15:54:13+00:00"
+        }
+      ]
+    },
+    {
+      "pr_number": 6085,
+      "precision": 0.1111,
+      "recall": 1.0,
+      "f1_score": 0.2,
+      "severity_weighted_score": 0.1905,
+      "human_findings_count": 1,
+      "prism_findings_count": 9,
+      "prism_findings": [
+        {
+          "file": "libs/cli/langgraph_cli/config.py",
+          "line_start": 1259,
+          "severity": "MEDIUM",
+          "message": "A06 — Vulnerable Components: Enabling `--prerelease=allow` in `uv pip install` increases the risk of pulling in unstable, potentially malicious, or buggy pre-release versions of dependencies. Ensure that all dependencies are pinned to specific, trusted versions in `pyproject.toml` or `requirements.txt` to mitigate supply chain risks."
+        },
+        {
+          "file": "libs/cli/examples/graph_prerelease_reqs/requirements.txt",
+          "line_start": 6,
+          "severity": "MEDIUM",
+          "message": "The requirement 'langgraph==1.0.0a2' is significantly older than the version specified in 'pyproject.toml' (1.1.5). This creates a dependency conflict and potential runtime instability. Ensure the requirements file matches the project's intended version constraints."
+        },
+        {
+          "file": "libs/cli/examples/graph_prerelease_reqs/agent.py",
+          "line_start": 12,
+          "severity": "MEDIUM",
+          "message": "The import `from langchain_community.tools.tavily_search import TavilySearchResults` is used, but ensure that `langchain-community` is explicitly listed in the project's dependencies (it is missing from `pyproject.toml` in this directory)."
+        },
+        {
+          "file": ".github/workflows/_integration_test.yml",
+          "line_start": 108,
+          "severity": "LOW",
+          "message": "A02 — Cryptographic Failures: Sensitive environment variables (LANGSMITH_API_KEY) are being appended to a local `.env` file in a CI environment. While this is common for integration testing, ensure that these files are cleaned up after the test run to prevent accidental exposure in build artifacts or logs."
+        },
+        {
+          "file": "libs/cli/examples/graph_prerelease_reqs/agent.py",
+          "line_start": 10,
+          "severity": "LOW",
+          "message": "Unused import: `from langchain.chat_models import init_chat_model` is imported but `init_chat_model` is not used in the provided code (the code uses `ChatOpenAI` and `init_chat_model` is called, but the import might be redundant if `langchain_openai` is used directly or if the import is unnecessary)."
+        },
+        {
+          "file": "libs/cli/examples/graph_prerelease_reqs/langgraph.json",
+          "line_start": 1,
+          "severity": "LOW",
+          "message": "The JSON file contains a trailing comma in the `dependencies` array (if strictly parsed) or inconsistent indentation. Ensure standard JSON formatting."
+        },
+        {
+          "file": "libs/cli/examples/graph_prerelease_reqs/agent.py",
+          "line_start": 1,
+          "severity": "SUGGESTION",
+          "message": "The agent implementation uses 'langchain.chat_models.init_chat_model', which is a newer API. Ensure that the environment where this code runs has 'langchain>=0.3.0' installed, as older versions of LangChain do not support this function."
+        },
+        {
+          "file": "libs/cli/examples/graph_prerelease_reqs/agent.py",
+          "line_start": 24,
+          "severity": "SUGGESTION",
+          "message": "The `should_continue` function is missing type hints for the `state` parameter and the return value. Adding `def should_continue(state: AgentState) -> Literal['continue', 'end']:` would improve readability and type safety."
+        },
+        {
+          "file": "libs/cli/examples/graph_prerelease_reqs/agent.py",
+          "line_start": 36,
+          "severity": "SUGGESTION",
+          "message": "The `call_model` function is missing type hints for the `state` and `config` parameters, and the return value. Adding `def call_model(state: AgentState, config: RunnableConfig) -> dict[str, list[BaseMessage]]:` would improve clarity."
+        }
+      ],
+      "human_comments": [
+        {
+          "body": "```suggestion\nlangchain==1.0.0a2\nlanggraph==1.0.0a2\n```\n\nThis actually passes for me even before your fix, since langchain 1.0.0a2 doesn't depend on an alpha.\n\n",
+          "file": "libs/cli/examples/graph_prerelease_reqs/requirements.txt",
+          "line": 1,
+          "reviewer": "hinthornw",
+          "created_at": "2025-09-05T22:04:15+00:00"
+        }
+      ]
+    },
+    {
+      "pr_number": 7773,
+      "precision": 0.1429,
+      "recall": 1.0,
+      "f1_score": 0.25,
+      "severity_weighted_score": 0.2222,
+      "human_findings_count": 1,
+      "prism_findings_count": 7,
+      "prism_findings": [
+        {
+          "file": "libs/langgraph/langgraph/pregel/_loop.py",
+          "line_start": 725,
+          "severity": "MEDIUM",
+          "message": "The `_resume_error_handlers_if_applicable` method performs a nested loop over `checkpoint_pending_writes` (O(N*M) where N is the number of ERROR_SOURCE_NODE entries and M is the total number of pending writes). While acceptable for small graphs, this could become a performance bottleneck if a graph has many pending writes. Consider pre-processing `checkpoint_pending_writes` into a lookup dictionary once."
+        },
+        {
+          "file": "libs/langgraph/langgraph/pregel/_runner.py",
+          "line_start": 600,
+          "severity": "MEDIUM",
+          "message": "The `ERROR_SOURCE_NODE` write is appended to `task.writes` inside `commit`. If `put_writes` fails or is interrupted, the `ERROR_SOURCE_NODE` marker might not be persisted, but the `_handled_exception_ids` set will have already been updated. This could lead to inconsistent state where the runner thinks an exception is handled, but the loop does not see the marker on resume."
+        },
+        {
+          "file": "libs/langgraph/langgraph/pregel/_loop.py",
+          "line_start": 725,
+          "severity": "MEDIUM",
+          "message": "The method `_resume_error_handlers_if_applicable` is quite long (~60 lines). Consider extracting the logic for preparing the `handler_task` into a smaller, dedicated helper method to improve readability and maintainability."
+        },
+        {
+          "file": "libs/langgraph/langgraph/pregel/_loop.py",
+          "line_start": 741,
+          "severity": "LOW",
+          "message": "The `task = self.tasks.get(task_id)` check is performed inside a loop. If `task` is `None`, the code silently continues. While this prevents a crash, it might mask issues where a task expected to be in `self.tasks` is missing after a resume. Consider adding a debug log or assertion if this state is unreachable."
+        },
+        {
+          "file": "libs/langgraph/langgraph/pregel/_loop.py",
+          "line_start": 746,
+          "severity": "LOW",
+          "message": "The nested loop and `next()` call to find the error for a task ID is O(N*M) where N is the number of pending writes and M is the number of failed tasks. If `checkpoint_pending_writes` is large, this could be a performance bottleneck. Consider pre-processing `checkpoint_pending_writes` into a dictionary mapping `task_id` to its error/source info."
+        },
+        {
+          "file": "libs/langgraph/langgraph/pregel/_loop.py",
+          "line_start": 209,
+          "severity": "SUGGESTION",
+          "message": "The comment 'Same pattern as `_delta_write_futs` but for error-handler writes' is helpful, but consider adding a type hint for the list elements if possible (e.g., `list[concurrent.futures.Future] | None`) to improve clarity, as `Any` is quite broad."
+        },
+        {
+          "file": "libs/langgraph/langgraph/pregel/_loop.py",
+          "line_start": 765,
+          "severity": "SUGGESTION",
+          "message": "The `prepare_node_error_handler_task` call has a very long argument list. While this matches existing patterns in the file, it is a candidate for refactoring into a configuration object or using a builder pattern to reduce cognitive load."
+        }
+      ],
+      "human_comments": [
+        {
+          "body": "@sydney-runkle just a rename! hope you are okay we I some minor cleanup/refactor as we touch the code (if we feel safe)",
+          "file": "libs/langgraph/langgraph/pregel/_loop.py",
+          "line": 51,
+          "reviewer": "longquanzheng",
+          "created_at": "2026-05-12T01:00:21+00:00"
+        }
+      ]
+    },
+    {
+      "pr_number": 7747,
+      "precision": 0.7143,
+      "recall": 1.0,
+      "f1_score": 0.8333,
+      "severity_weighted_score": 1.0,
+      "human_findings_count": 5,
+      "prism_findings_count": 7,
+      "prism_findings": [
+        {
+          "file": "libs/langgraph/langgraph/graph/state.py",
+          "line_start": 1312,
+          "severity": "MEDIUM",
+          "message": "The logic for applying `error_handler_node` defaults is potentially incomplete. If a node already has an `error_handler_node` assigned (e.g., via `add_node`), the current code correctly skips it. However, if `default_handler_name` is `None` (no default handler set), the `spec.error_handler_node` remains `None`. This is correct, but the loop logic `if not spec.is_error_handler and default_handler_name is not None and spec.error_handler_node is None` is safe. The risk is that `spec.error_handler_node` might be set to a value that is not a valid node name if the user manually manipulated the `nodes` dictionary. While not a direct bug in the provided code, it relies on the assumption that `spec.error_handler_node` is either `None` or a valid node name. Consider adding a validation step to ensure `spec.error_handler_node` exists in `self.nodes` if it is not `None`."
+        },
+        {
+          "file": "libs/langgraph/langgraph/graph/state.py",
+          "line_start": 1315,
+          "severity": "MEDIUM",
+          "message": "The logic for applying `error_handler` defaults is potentially incomplete. While it correctly checks `spec.error_handler_node is None`, it does not account for cases where a user might have explicitly set `error_handler=None` in `add_node` to disable inheritance. If `add_node` allows `error_handler=None` as an explicit override, this logic will incorrectly overwrite it with the default handler. Ensure `StateNodeSpec` distinguishes between 'unset' (None) and 'explicitly disabled' (e.g., a sentinel value)."
+        },
+        {
+          "file": "libs/langgraph/langgraph/graph/state.py",
+          "line_start": 1335,
+          "severity": "LOW",
+          "message": "The `node_error_handler_map` construction filters out `is_error_handler` nodes. While this prevents the default handler from catching itself, it might be safer to explicitly validate that no node's `error_handler_node` points to an `is_error_handler` node to prevent circular error handling chains."
+        },
+        {
+          "file": "libs/langgraph/langgraph/graph/state.py",
+          "line_start": 1300,
+          "severity": "LOW",
+          "message": "The `default_handler_name` node is created with `input_schema=self.state_schema`. If the user-provided `error_handler` expects a different schema (e.g., a specific subset of the state or a different type), this might cause runtime validation errors. Consider if the error handler should be validated against the graph's state schema at compile time."
+        },
+        {
+          "file": "libs/langgraph/langgraph/graph/state.py",
+          "line_start": 1324,
+          "severity": "LOW",
+          "message": "The loop body in `compile` is becoming complex. Consider extracting the policy application logic into a private helper method (e.g., `_apply_node_defaults`) to improve readability."
+        },
+        {
+          "file": "libs/langgraph/tests/test_retry.py",
+          "line_start": 2284,
+          "severity": "LOW",
+          "message": "The test file contains duplicate test functions that were already present in the provided diff context (e.g., `test_set_node_defaults_error_handler_catches_all_nodes`). Ensure the PR does not accidentally include redundant test code."
+        },
+        {
+          "file": "libs/langgraph/langgraph/graph/state.py",
+          "line_start": 1305,
+          "severity": "SUGGESTION",
+          "message": "The comment 'Apply builder defaults to node specs. Per-node values always win.' is duplicated on line 1305 and 1323. Consider removing the redundant one."
+        }
+      ],
+      "human_comments": [
+        {
+          "body": "ok actually, i think might be cleaner in `StateGraph.__init__`\n\nthat way we can just manage this in `add_node` :)\n\ncan we TAL at that alternative?",
+          "file": "libs/langgraph/langgraph/graph/state.py",
+          "line": 1,
+          "reviewer": "sydney-runkle",
+          "created_at": "2026-05-08T19:52:47+00:00"
+        },
+        {
+          "body": "great feedback. change to `set_defaults` for now.",
+          "file": "libs/langgraph/langgraph/graph/state.py",
+          "line": 1,
+          "reviewer": "longquanzheng",
+          "created_at": "2026-05-08T21:30:05+00:00"
+        },
+        {
+          "body": "`set_node_defaults`?",
+          "file": "libs/langgraph/langgraph/graph/state.py",
+          "line": 1,
+          "reviewer": "sydney-runkle",
+          "created_at": "2026-05-09T09:54:44+00:00"
+        },
+        {
+          "body": "self._node_defaults.retry_policy? and similar",
+          "file": "libs/langgraph/langgraph/graph/state.py",
+          "line": 1,
+          "reviewer": "sydney-runkle",
+          "created_at": "2026-05-09T09:55:08+00:00"
+        },
+        {
+          "body": "let's remove this arg to `compile` and just expose the `set_defaults` method",
+          "file": "libs/langgraph/langgraph/graph/state.py",
+          "line": 1,
+          "reviewer": "sydney-runkle",
+          "created_at": "2026-05-09T09:55:45+00:00"
+        }
+      ]
+    },
+    {
+      "pr_number": 7746,
+      "precision": 0.6,
+      "recall": 0.3333,
+      "f1_score": 0.4286,
+      "severity_weighted_score": 1.0,
+      "human_findings_count": 9,
+      "prism_findings_count": 5,
+      "prism_findings": [
+        {
+          "file": "libs/langgraph/langgraph/pregel/_loop.py",
+          "line_start": 1012,
+          "severity": "MEDIUM",
+          "message": "The variable `prev_counters` is initialized using `self.checkpoint_metadata.get(\"counters_since_delta_snapshot\") or {}`. Since `counters_since_delta_snapshot` is a `dict[str, tuple[int, int]]`, ensure that the default empty dict `{}` does not cause type mismatch issues with downstream code expecting tuples."
+        },
+        {
+          "file": "libs/langgraph/langgraph/pregel/_loop.py",
+          "line_start": 1003,
+          "severity": "LOW",
+          "message": "The comment 'will rename to _on_loop_exit soon' suggests an outdated TODO. If this is still pending, consider tracking it in an issue or removing the comment if the rename is no longer planned."
+        },
+        {
+          "file": "libs/langgraph/tests/test_delta_channel_supersteps_bound.py",
+          "line_start": 44,
+          "severity": "LOW",
+          "message": "The `State` definition uses `TypedDict` with `noqa: UP013`. While this is a common pattern for dynamic types, ensure that the `State` structure is documented or typed more explicitly if it grows in complexity."
+        },
+        {
+          "file": "libs/checkpoint/langgraph/checkpoint/base/__init__.py",
+          "line_start": 60,
+          "severity": "SUGGESTION",
+          "message": "The docstring for `counters_since_delta_snapshot` is very detailed. Consider moving the implementation details (like the default value 5000 and the environment variable name) to a separate section or a module-level constant to keep the TypedDict definition cleaner."
+        },
+        {
+          "file": "libs/langgraph/tests/test_delta_channel_supersteps_bound.py",
+          "line_start": 150,
+          "severity": "SUGGESTION",
+          "message": "The test `test_counter_reset_after_supersteps_snapshot` is quite long. Consider breaking it into smaller, more focused test cases to improve readability and maintainability."
+        }
+      ],
+      "human_comments": [
+        {
+          "body": "let's use a named tuple?",
+          "file": "libs/checkpoint/langgraph/checkpoint/base/__init__.py",
+          "line": 1,
+          "reviewer": "sydney-runkle",
+          "created_at": "2026-05-08T19:25:34+00:00"
+        },
+        {
+          "body": "should still have delta in the name maybe?",
+          "file": "libs/checkpoint/langgraph/checkpoint/base/__init__.py",
+          "line": 1,
+          "reviewer": "sydney-runkle",
+          "created_at": "2026-05-08T19:26:31+00:00"
+        },
+        {
+          "body": "seems like overkill for a helper function",
+          "file": "libs/langgraph/langgraph/pregel/_checkpoint.py",
+          "line": 1,
+          "reviewer": "sydney-runkle",
+          "created_at": "2026-05-08T19:27:22+00:00"
+        },
+        {
+          "body": "why do we have to patch this?",
+          "file": "libs/langgraph/tests/test_delta_channel_supersteps_bound.py",
+          "line": 1,
+          "reviewer": "sydney-runkle",
+          "created_at": "2026-05-08T19:28:05+00:00"
+        },
+        {
+          "body": "removed",
+          "file": "libs/langgraph/tests/test_delta_channel_supersteps_bound.py",
+          "line": 1,
+          "reviewer": "longquanzheng",
+          "created_at": "2026-05-08T19:35:07+00:00"
+        },
+        {
+          "body": "yeah but it's exsting code from your prev PR that I thought you have reasons to do. I can remove.",
+          "file": "libs/langgraph/langgraph/pregel/_checkpoint.py",
+          "line": 1,
+          "reviewer": "longquanzheng",
+          "created_at": "2026-05-08T19:37:45+00:00"
+        },
+        {
+          "body": "I want to avoid super long name, maybe counters_since_delta_snapshot?",
+          "file": "libs/checkpoint/langgraph/checkpoint/base/__init__.py",
+          "line": 1,
+          "reviewer": "longquanzheng",
+          "created_at": "2026-05-08T19:38:50+00:00"
+        },
+        {
+          "body": "landed onto `counters_since_delta_snapshot`",
+          "file": "libs/checkpoint/langgraph/checkpoint/base/__init__.py",
+          "line": 1,
+          "reviewer": "longquanzheng",
+          "created_at": "2026-05-08T19:46:16+00:00"
+        },
+        {
+          "body": "can we use a named tuple?",
+          "file": "libs/checkpoint/langgraph/checkpoint/base/__init__.py",
+          "line": 1,
+          "reviewer": "sydney-runkle",
+          "created_at": "2026-05-08T19:54:50+00:00"
+        }
+      ]
+    },
+    {
+      "pr_number": 7743,
+      "precision": 1.0,
+      "recall": 0.25,
+      "f1_score": 0.4,
+      "severity_weighted_score": 0.4,
+      "human_findings_count": 4,
+      "prism_findings_count": 1,
+      "prism_findings": [
+        {
+          "file": "libs/checkpoint/langgraph/checkpoint/serde/jsonplus.py",
+          "line_start": 47,
+          "severity": "CRITICAL",
+          "message": "The global constant LC_REVIVER is initialized with `Reviver(allowed_objects='core')`. The `Reviver` class (from langchain_core) typically expects a list or set of allowed objects, not the string 'core'. If 'core' is not a valid configuration for the Reviver's allowlist, this will cause runtime errors during deserialization of LC:2 envelopes. Verify if 'core' is a supported shorthand or if it should be a specific collection of types."
+        }
+      ],
+      "human_comments": [
+        {
+          "body": "this has defaulted to `\"core\"` since late December: https://github.com/langchain-ai/langchain/pull/34455",
+          "file": "libs/checkpoint/langgraph/checkpoint/serde/jsonplus.py",
+          "line": 5,
+          "reviewer": "ccurme",
+          "created_at": "2026-05-08T15:52:08+00:00"
+        },
+        {
+          "body": "Resolved by setting to `\"core\"` (default for last 5 months).",
+          "file": "libs/checkpoint/langgraph/checkpoint/serde/jsonplus.py",
+          "line": 8,
+          "reviewer": "ccurme",
+          "created_at": "2026-05-08T15:53:30+00:00"
+        },
+        {
+          "body": "Somewhere above that could you put a reference to the trust model for JSONPlus serializer",
+          "file": "libs/checkpoint/langgraph/checkpoint/serde/jsonplus.py",
+          "line": 5,
+          "reviewer": "eyurtsev",
+          "created_at": "2026-05-08T18:22:34+00:00"
+        },
+        {
+          "body": "ah it's fine in this context -- used within jsonplus serializer",
+          "file": "libs/checkpoint/langgraph/checkpoint/serde/jsonplus.py",
+          "line": 5,
+          "reviewer": "eyurtsev",
+          "created_at": "2026-05-08T18:27:28+00:00"
+        }
+      ]
+    },
+    {
+      "pr_number": 7745,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1_score": 0.0,
+      "severity_weighted_score": 0.0,
+      "human_findings_count": 2,
+      "prism_findings_count": 2,
+      "prism_findings": [
+        {
+          "file": "libs/checkpoint/langgraph/checkpoint/base/__init__.py",
+          "line_start": 680,
+          "severity": "CRITICAL",
+          "message": "The methods `get_delta_channel_keepset` and `aget_delta_channel_keepset` were removed from `BaseCheckpointSaver`, but they are still referenced in the docstrings of `prune`, `adelete_for_runs`, `copy_thread`, and `acopy_thread` as the recommended way to handle `DeltaChannel` persistence. These references should be updated or replaced with the new logic for determining the keep-set."
+        },
+        {
+          "file": "libs/checkpoint-conformance/langgraph/checkpoint/conformance/capabilities.py",
+          "line_start": 46,
+          "severity": "MEDIUM",
+          "message": "The `ALL_CAPABILITIES` set in `capabilities.py` still contains `DELTA_CHANNEL_KEEPSET` and `DELTA_CHANNEL_RECONSTRUCTION` despite them being removed from the `Capability` enum. This will cause `DetectedCapabilities.from_instance` to report these as 'missing' for every checkpointer, potentially breaking conformance validation logic."
+        }
+      ],
+      "human_comments": [
+        {
+          "body": "weren't we gonna remove this test file?",
+          "file": "libs/checkpoint-conformance/README.md",
+          "line": 1,
+          "reviewer": "sydney-runkle",
+          "created_at": "2026-05-08T17:43:25+00:00"
+        },
+        {
+          "body": "ah I thought I have. sorry",
+          "file": "libs/checkpoint-conformance/README.md",
+          "line": 1,
+          "reviewer": "longquanzheng",
+          "created_at": "2026-05-08T17:49:07+00:00"
+        }
+      ]
+    },
+    {
+      "pr_number": 7736,
+      "precision": 0.2353,
+      "recall": 0.3636,
+      "f1_score": 0.2857,
+      "severity_weighted_score": 0.5161,
+      "human_findings_count": 11,
+      "prism_findings_count": 17,
+      "prism_findings": [
+        {
+          "file": "libs/checkpoint/langgraph/checkpoint/base/__init__.py",
+          "line_start": 656,
+          "severity": "MEDIUM",
+          "message": "The `get_delta_channel_keepset` implementation iterates through the parent chain using `get_tuple`. If `target_tuple.parent_config` is None (e.g., at the root), the loop terminates correctly, but if `get_tuple` returns None for an intermediate parent (e.g., due to partial deletion or data corruption), the loop breaks silently. This might lead to an incomplete keep-set, potentially causing data loss during pruning. Consider adding a warning or logging when a parent is missing unexpectedly."
+        },
+        {
+          "file": "libs/checkpoint/langgraph/checkpoint/base/__init__.py",
+          "line_start": 703,
+          "severity": "MEDIUM",
+          "message": "Similar to the synchronous version, `aget_delta_channel_keepset` silently breaks the loop if `await self.aget_tuple(cursor_config)` returns None. This could result in an incomplete keep-set if the checkpoint chain is broken, leading to accidental deletion of required ancestors."
+        },
+        {
+          "file": "libs/checkpoint/langgraph/checkpoint/base/__init__.py",
+          "line_start": 680,
+          "severity": "MEDIUM",
+          "message": "The `get_delta_channel_keepset` implementation performs a synchronous walk of the parent chain using `get_tuple`. While the docstring notes this is a reference implementation, it is highly inefficient for large chains (O(N) calls to `get_tuple`). For backends like SQL, this should be implemented as a single recursive CTE query to avoid N+1 query issues."
+        },
+        {
+          "file": "libs/checkpoint/langgraph/checkpoint/base/__init__.py",
+          "line_start": 724,
+          "severity": "MEDIUM",
+          "message": "The `aget_delta_channel_keepset` implementation performs an asynchronous walk of the parent chain using `aget_tuple`. Similar to the synchronous version, this is an O(N) operation. In high-concurrency environments or deep checkpoint chains, this will cause significant latency. Consider providing a hook for backends to override this with a single optimized query."
+        },
+        {
+          "file": "libs/checkpoint-conformance/langgraph/checkpoint/conformance/spec/test_delta_channel_history.py",
+          "line_start": 125,
+          "severity": "LOW",
+          "message": "The test `test_history_empty_channels_returns_empty` uses `configs[-1]` which is the head of the chain. While this is correct for the test, ensure that `aget_delta_channel_history` handles cases where the config passed is not the absolute head of the thread, as the contract implies walking the parent chain from the provided config."
+        },
+        {
+          "file": "libs/checkpoint-conformance/langgraph/checkpoint/conformance/spec/test_delta_channel_keepset.py",
+          "line_start": 104,
+          "severity": "LOW",
+          "message": "The test `test_keepset_multi_channel_union` manually constructs a checkpoint chain. While functional, it duplicates logic found in `build_delta_chain`. Consider extending `build_delta_chain` to support multiple channels to simplify test fixtures."
+        },
+        {
+          "file": "libs/checkpoint-conformance/langgraph/checkpoint/conformance/spec/_delta_fixtures.py",
+          "line_start": 47,
+          "severity": "SUGGESTION",
+          "message": "The `write_value_fn` default implementation is defined inside the `if write_value_fn is None:` block. While functional, it is cleaner to define it as a default argument or a helper function outside the loop to improve readability and avoid re-definition."
+        },
+        {
+          "file": "libs/checkpoint-conformance/langgraph/checkpoint/conformance/capabilities.py",
+          "line_start": 60,
+          "severity": "SUGGESTION",
+          "message": "The mapping for `Capability.DELTA_CHANNEL_KEEPSET` is set to `aget_tuple`. This appears to be a copy-paste error or a placeholder, as the capability should map to `aget_delta_channel_keepset`."
+        },
+        {
+          "file": "libs/checkpoint-conformance/langgraph/checkpoint/conformance/spec/test_delta_channel_history.py",
+          "line_start": 105,
+          "severity": "SUGGESTION",
+          "message": "The variable `configs` is initialized as `list` but used as a list of `RunnableConfig`. Consider using `list[RunnableConfig] = []` for better type safety."
+        },
+        {
+          "file": "libs/checkpoint-conformance/langgraph/checkpoint/conformance/spec/test_delta_channel_history.py",
+          "line_start": 108,
+          "severity": "SUGGESTION",
+          "message": "The variable `cv` is initialized as `dict` but used as `dict[str, Any]`. Consider using `dict[str, Any] = {}` for better type safety."
+        },
+        {
+          "file": "libs/checkpoint-conformance/langgraph/checkpoint/conformance/spec/test_delta_channel_history.py",
+          "line_start": 109,
+          "severity": "SUGGESTION",
+          "message": "The variable `cvs` is initialized as `dict` but used as `dict[str, int]`. Consider using `dict[str, int] = {}` for better type safety."
+        },
+        {
+          "file": "libs/checkpoint-conformance/langgraph/checkpoint/conformance/spec/test_delta_channel_keepset.py",
+          "line_start": 54,
+          "severity": "SUGGESTION",
+          "message": "The variable `configs` is initialized as `list` but used as a list of `RunnableConfig`. Consider using `list[RunnableConfig] = []` for better type safety."
+        },
+        {
+          "file": "libs/checkpoint-conformance/langgraph/checkpoint/conformance/spec/test_delta_channel_keepset.py",
+          "line_start": 62,
+          "severity": "SUGGESTION",
+          "message": "The variable `cv` is initialized as `dict` but used as `dict[str, Any]`. Consider using `dict[str, Any] = {}` for better type safety."
+        },
+        {
+          "file": "libs/checkpoint-conformance/langgraph/checkpoint/conformance/spec/test_delta_channel_keepset.py",
+          "line_start": 63,
+          "severity": "SUGGESTION",
+          "message": "The variable `cvs` is initialized as `dict` but used as `dict[str, int]`. Consider using `dict[str, int] = {}` for better type safety."
+        },
+        {
+          "file": "libs/checkpoint-conformance/langgraph/checkpoint/conformance/spec/test_delta_channel_history.py",
+          "line_start": 181,
+          "severity": "SUGGESTION",
+          "message": "The variable `configs` is initialized as `list` but used as a list of `RunnableConfig`. Consider using `list[RunnableConfig] = []` for better type safety."
+        },
+        {
+          "file": "libs/checkpoint-conformance/langgraph/checkpoint/conformance/spec/test_delta_channel_history.py",
+          "line_start": 189,
+          "severity": "SUGGESTION",
+          "message": "The variable `cv` is initialized as `dict` but used as `dict[str, Any]`. Consider using `dict[str, Any] = {}` for better type safety."
+        },
+        {
+          "file": "libs/checkpoint-conformance/langgraph/checkpoint/conformance/spec/test_delta_channel_history.py",
+          "line_start": 190,
+          "severity": "SUGGESTION",
+          "message": "The variable `cvs` is initialized as `dict` but used as `dict[str, int]`. Consider using `dict[str, int] = {}` for better type safety."
+        }
+      ],
+      "human_comments": [
+        {
+          "body": "i feel like this is too mock-y? is it valuable for us to test this?",
+          "file": "libs/checkpoint-conformance/langgraph/checkpoint/conformance/spec/test_delta_channel_reconstruction.py",
+          "line": 30,
+          "reviewer": "sydney-runkle",
+          "created_at": "2026-05-07T21:05:33+00:00"
+        },
+        {
+          "body": "nice",
+          "file": "libs/checkpoint-conformance/langgraph/checkpoint/conformance/spec/__init__.py",
+          "line": 1,
+          "reviewer": "sydney-runkle",
+          "created_at": "2026-05-07T21:05:52+00:00"
+        },
+        {
+          "body": "i think one test we're missing in this file is the case of a migration\n\nold checkpoints has channel_values for the given channel\nit gets swapped to delta channel\nwant to make sure we respect the \"seed\" as the raw channel value",
+          "file": "libs/checkpoint-conformance/langgraph/checkpoint/conformance/spec/__init__.py",
+          "line": 1,
+          "reviewer": "sydney-runkle",
+          "created_at": "2026-05-07T21:07:15+00:00"
+        },
+        {
+          "body": "what's this for?",
+          "file": "libs/checkpoint-conformance/pyproject.toml",
+          "line": 11,
+          "reviewer": "sydney-runkle",
+          "created_at": "2026-05-07T21:07:47+00:00"
+        },
+        {
+          "body": "should we add some sort of force snapshot mechanism on the checkpointer so implementations don't have to do this?",
+          "file": "libs/checkpoint/langgraph/checkpoint/base/__init__.py",
+          "line": 29,
+          "reviewer": "sydney-runkle",
+          "created_at": "2026-05-07T21:10:02+00:00"
+        },
+        {
+          "body": "custom implementations should implement a version of this that's efficient for their data model right?",
+          "file": "libs/checkpoint/langgraph/checkpoint/base/__init__.py",
+          "line": 119,
+          "reviewer": "sydney-runkle",
+          "created_at": "2026-05-07T21:12:10+00:00"
+        },
+        {
+          "body": "All because of ty rules in the pkg.\r\n\r\nThe Checkpoint TypedDict gained updated_channels as a required key. \r\n\r\nWhen we construct Checkpoint(...) in the test fixtures, ty requires it even though it's None. Rather than making updated_channels NotRequired (which would be a broader change), we suppress the diagnostic here. \r\n\r\nThe unresolved-import suppression is because the conformance tests import _DeltaSnapshot (private/beta) and langgraph.channels.delta (not a declared dep of this package — only available at test time).",
+          "file": "libs/checkpoint-conformance/pyproject.toml",
+          "line": 11,
+          "reviewer": "longquanzheng",
+          "created_at": "2026-05-07T23:59:46+00:00"
+        },
+        {
+          "body": "yeah unfortunately it won't work with LSD as you said",
+          "file": "libs/checkpoint/langgraph/checkpoint/base/__init__.py",
+          "line": 29,
+          "reviewer": "longquanzheng",
+          "created_at": "2026-05-08T00:01:06+00:00"
+        },
+        {
+          "body": "yes, let me update the comment to make it clear this is an example as basic implementation.\r\n\r\nOr maybe just remove it if you want? doesn't seem necessary to keep, but I am hesitating because it could be usefult to read as an example.",
+          "file": "libs/checkpoint/langgraph/checkpoint/base/__init__.py",
+          "line": 119,
+          "reviewer": "longquanzheng",
+          "created_at": "2026-05-08T00:02:10+00:00"
+        },
+        {
+          "body": "The main value is catching serialization round-trip bugs — if a saver fails to preserve _DeltaSnapshot through its blob codec. \r\n\r\nbut yeah I feel like test_delta_channel_history.py should be enough. will remove it.",
+          "file": "libs/checkpoint-conformance/langgraph/checkpoint/conformance/spec/test_delta_channel_reconstruction.py",
+          "line": 30,
+          "reviewer": "longquanzheng",
+          "created_at": "2026-05-08T00:04:51+00:00"
+        },
+        {
+          "body": "> The Checkpoint TypedDict gained updated_channels as a required key.\r\n\r\nThis wasn't in this PR, so I don't think we should need?",
+          "file": "libs/checkpoint-conformance/pyproject.toml",
+          "line": 11,
+          "reviewer": "sydney-runkle",
+          "created_at": "2026-05-08T13:41:07+00:00"
+        }
+      ]
+    }
+  ],
+  "run_at": "2026-06-24T19:46:04.913945Z"
+}
