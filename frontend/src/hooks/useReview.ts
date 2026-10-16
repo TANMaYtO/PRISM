@@ -69,9 +69,12 @@ export function useReview(urlParam: string | null) {
     }
     const [, owner, repo, pr] = match;
 
-    const eventSource = new EventSource(
-      `/api/review?repo_owner=${owner}&repo_name=${repo}&pr_number=${pr}`
-    );
+    const apiBase = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/+$/, "");
+    const streamEndpoint = apiBase
+      ? `${apiBase}/review?repo_owner=${owner}&repo_name=${repo}&pr_number=${pr}`
+      : `/api/review?repo_owner=${owner}&repo_name=${repo}&pr_number=${pr}`;
+
+    const eventSource = new EventSource(streamEndpoint);
 
     eventSource.onmessage = (event) => {
       // EventSource wrapper if backend uses standard SSE format without explicit event fields, 
