@@ -87,10 +87,24 @@ def _collect_source_files(repo_path: Path) -> list[Document]:
     return documents
 
 
+def _sanitize_path_segment(value: str) -> str:
+    """Sanitize a path component by replacing unsafe characters."""
+    return "".join(c if (c.isalnum() or c in ("-", "_", ".")) else "_" for c in value)
+
+
+def _safe_repo_dir_name(owner: str, repo_name: str, branch: str) -> str:
+    """Build a filesystem-safe directory name for repo cloning and caching."""
+    safe_owner = _sanitize_path_segment(owner)
+    safe_repo = _sanitize_path_segment(repo_name)
+    safe_branch = _sanitize_path_segment(branch)
+    return f"{safe_owner}_{safe_repo}_{safe_branch}"
+
+
 def _clone_repo(owner: str, repo_name: str, branch: str) -> Path:
     """Shallow-clone the repository to a cached directory."""
     TEMP_CLONE_DIR.mkdir(parents=True, exist_ok=True)
-    clone_dir = TEMP_CLONE_DIR / f"{owner}_{repo_name}_{branch}"
+    folder_name = _safe_repo_dir_name(owner, repo_name, branch)
+    clone_dir = TEMP_CLONE_DIR / folder_name
     
     if clone_dir.exists() and (clone_dir / ".git").exists():
         logger.info("Using cached repo clone at %s", clone_dir)
@@ -127,7 +141,8 @@ def _estimate_tokens(text: str) -> int:
 
 def _get_cache_dir(owner: str, repo_name: str, branch: str) -> Path:
     """Return the absolute cache directory for a given repo + branch."""
-    return FAISS_CACHE_DIR / f"{owner}_{repo_name}_{branch}"
+    folder_name = _safe_repo_dir_name(owner, repo_name, branch)
+    return FAISS_CACHE_DIR / folder_name
 
 
 class HybridCodeRetriever:

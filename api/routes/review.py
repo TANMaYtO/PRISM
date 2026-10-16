@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import time
 from typing import Any, AsyncGenerator
 
@@ -22,6 +23,27 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+_REPO_SEGMENT_RE = re.compile(r"^[a-zA-Z0-9_.-]+$")
+
+
+def _validate_repo_params(owner: str, name: str, pr_number: int) -> None:
+    """Validate repository owner, name, and PR number format."""
+    if not _REPO_SEGMENT_RE.match(owner):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid repository owner: '{owner}'. Only alphanumeric, hyphen, period, and underscore characters are allowed.",
+        )
+    if not _REPO_SEGMENT_RE.match(name):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid repository name: '{name}'. Only alphanumeric, hyphen, period, and underscore characters are allowed.",
+        )
+    if pr_number <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid PR number: {pr_number}. Must be greater than zero.",
+        )
+
 
 @router.get(
     "",
@@ -35,6 +57,8 @@ router = APIRouter()
 )
 async def create_review(repo_owner: str, repo_name: str, pr_number: int) -> StreamingResponse:
     """Execute a full PRISM review and stream SSE events."""
+    _validate_repo_params(repo_owner, repo_name, pr_number)
+
     logger.info(
         "Review requested: %s/%s#%d",
         repo_owner,
@@ -84,6 +108,7 @@ async def create_review(repo_owner: str, repo_name: str, pr_number: int) -> Stre
                     review=review_obj,
                 )
                 if review_id:
+                    yield f"event: saved\ndata: {{\"id\": \"{review_id}\"}}\n\n"
                     yield f"event: persisted\ndata: {{\"id\": \"{review_id}\"}}\n\n"
 
         except Exception as exc:

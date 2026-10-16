@@ -6,6 +6,7 @@ Provides REST endpoints for submitting PR reviews and running benchmarks.
 from __future__ import annotations
 
 import logging
+import os
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
@@ -33,16 +34,16 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application startup / shutdown lifecycle."""
-    logger.info("🔷 PRISM starting up …")
+    logger.info("PRISM starting up ...")
     try:
         await get_client()
         logger.info(f"Connected to Supabase at {SUPABASE_URL}")
     except Exception as e:
         logger.error(f"Failed to initialize Supabase connection: {e}")
-        
+
     logger.info("SSE streaming enabled on POST /review")
     yield
-    logger.info("🔷 PRISM shutting down …")
+    logger.info("PRISM shutting down ...")
 
 
 # ── App factory ──────────────────────────────────────────────────────
@@ -62,10 +63,14 @@ app = FastAPI(
 
 # ── CORS ─────────────────────────────────────────────────────────────
 
+allowed_origins_raw = os.getenv("ALLOWED_ORIGINS", "*")
+allowed_origins = [o.strip() for o in allowed_origins_raw.split(",") if o.strip()]
+is_wildcard = allowed_origins == ["*"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=allowed_origins,
+    allow_credentials=not is_wildcard,
     allow_methods=["*"],
     allow_headers=["*"],
 )

@@ -15,7 +15,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 # ── Application source ───────────────────────────────────────────
 COPY . .
 
-# ── Runtime ───────────────────────────────────────────────────────
+# ── Environment & Ports ──────────────────────────────────────────
+# Default to 7860 for Hugging Face Spaces, or dynamic $PORT on Render/Cloud Run
+ENV PORT=7860
+EXPOSE 7860
 EXPOSE 8000
 
-CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "uvicorn api.main:app --host 0.0.0.0 --port ${PORT:-7860}"]
