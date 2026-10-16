@@ -69,75 +69,91 @@ export function useReview(urlParam: string | null) {
     }
     const [, owner, repo, pr] = match;
 
-    const apiBase = (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/+$/, "");
-    const streamEndpoint = apiBase
-      ? `${apiBase}/review?repo_owner=${owner}&repo_name=${repo}&pr_number=${pr}`
-      : `/api/review?repo_owner=${owner}&repo_name=${repo}&pr_number=${pr}`;
+    let isCancelled = false;
+    let eventSource: EventSource | null = null;
 
-    const eventSource = new EventSource(streamEndpoint);
+    async function startStream() {
+      let streamEndpoint = `/api/review?repo_owner=${owner}&repo_name=${repo}&pr_number=${pr}`;
+      try {
+        const res = await fetch("/api/config");
+        if (res.ok) {
+          const cfg = await res.json();
+          if (cfg.backendUrl) {
+            streamEndpoint = `${cfg.backendUrl}/review?repo_owner=${owner}&repo_name=${repo}&pr_number=${pr}`;
+          }
+        }
+      } catch {
+        // fallback to /api/review
+      }
 
-    eventSource.onmessage = (event) => {
-      // EventSource wrapper if backend uses standard SSE format without explicit event fields, 
-      // but we expect the backend uses `event:` field and standard SSE.
-    };
+      if (isCancelled) return;
 
-    eventSource.addEventListener("status", (e: MessageEvent) => {
-      setStatus(JSON.parse(e.data));
-    });
+      eventSource = new EventSource(streamEndpoint);
 
-    eventSource.addEventListener("node_start", (e: MessageEvent) => {
-      const node = JSON.parse(e.data);
-      setAgentStatus((prev) => ({ ...prev, [node]: "running" }));
-    });
+      eventSource.addEventListener("status", (e: MessageEvent) => {
+        setStatus(JSON.parse(e.data));
+      });
 
-    eventSource.addEventListener("finding", (e: MessageEvent) => {
-      const finding: AgentFinding = JSON.parse(e.data);
-      findingsRef.current = [...findingsRef.current, finding];
-      setFindings(findingsRef.current);
-    });
+      eventSource.addEventListener("node_start", (e: MessageEvent) => {
+        const node = JSON.parse(e.data);
+        setAgentStatus((prev) => ({ ...prev, [node]: "running" }));
+      });
 
-    eventSource.addEventListener("agent_done", (e: MessageEvent) => {
-      const data = JSON.parse(e.data);
-      const agentName = data.agent;
-      setAgentStatus((prev) => ({ ...prev, [agentName]: "done" }));
-      setAgentCounts((prev) => ({ ...prev, [agentName]: data.count }));
+      eventSource.addEventListener("finding", (e: MessageEvent) => {
+        const finding: AgentFinding = JSON.parse(e.data);
+        findingsRef.current = [...findingsRef.current, finding];
+        setFindings(findingsRef.current);
+      });
 
-      // Compute worst severity for this agent
-      const agentFindings = findingsRef.current.filter(
-        (f) => f.agent_source === agentName
-      );
-      const worst = getWorstSeverity(agentFindings);
-      setAgentSeverity((prev) => ({ ...prev, [agentName]: worst }));
-    });
+      eventSource.addEventListener("agent_done", (e: MessageEvent) => {
+        const data = JSON.parse(e.data);
+        const agentName = data.agent;
+        setAgentStatus((prev) => ({ ...prev, [agentName]: "done" }));
+        setAgentCounts((prev) => ({ ...prev, [agentName]: data.count }));
 
-    eventSource.addEventListener("complete", (e: MessageEvent) => {
-      const data: PRReviewResponse = JSON.parse(e.data);
-      setFinalReview(data);
-      setAgentStatus((prev) => ({ ...prev, synthesizer: "done" }));
-      setStatus("Review complete.");
-      setIsStreaming(false);
-      eventSource.close();
-    });
+        // Compute worst severity for this agent
+        const agentFindings = findingsRef.current.filter(
+          (f) => f.agent_source === agentName
+        );
+        const worst = getWorstSeverity(agentFindings);
+        setAgentSeverity((prev) => ({ ...prev, [agentName]: worst }));
+      });
 
-    eventSource.addEventListener("saved", (e: MessageEvent) => {
-      const data = JSON.parse(e.data);
-      setReviewId(data.id);
-    });
+      eventSource.addEventListener("complete", (e: MessageEvent) => {
+        const data: PRReviewResponse = JSON.parse(e.data);
+        setFinalReview(data);
+        setAgentStatus((prev) => ({ ...prev, synthesizer: "done" }));
+        setStatus("Review complete.");
+        setIsStreaming(false);
+        eventSource?.close();
+      });
 
-    eventSource.addEventListener("error", (e: MessageEvent) => {
-      setError(e.data || "An error occurred during the review stream.");
-      setIsStreaming(false);
-      eventSource.close();
-    });
+      eventSource.addEventListener("saved", (e: MessageEvent) => {
+        const data = JSON.parse(e.data);
+        setReviewId(data.id);
+      });
 
-    eventSource.onerror = () => {
-      setError("Lost connection to the server.");
-      setIsStreaming(false);
-      eventSource.close();
-    };
+      eventSource.addEventListener("error", (e: MessageEvent) => {
+        setError(e.data || "An error occurred during the review stream.");
+        setIsStreaming(false);
+        eventSource?.close();
+      });
+
+      eventSource.onerror = () => {
+        // Only set error if not already finished
+        if (!finalReview) {
+          setError("Lost connection to the server.");
+        }
+        setIsStreaming(false);
+        eventSource?.close();
+      };
+    }
+
+    startStream();
 
     return () => {
-      eventSource.close();
+      isCancelled = true;
+      eventSource?.close();
     };
   }, [urlParam]);
 
