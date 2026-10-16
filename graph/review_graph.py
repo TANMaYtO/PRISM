@@ -165,6 +165,7 @@ async def run_review_stream(
             name = event.get("name", "")
 
             if kind == "on_chain_start":
+                yield {"event": "node_start", "data": name}
                 if name == "fetch_pr":
                     yield {
                         "event": "status",
@@ -184,6 +185,8 @@ async def run_review_stream(
                     # display name maps e.g. bug_detector -> Bug Detector
                     display_name = name.replace("_", " ").title()
                     yield {"event": "status", "data": f"Running {display_name}..."}
+                elif name == "synthesizer":
+                    yield {"event": "status", "data": "Synthesizing executive summary and final review..."}
 
             elif kind == "on_chain_end":
                 if name in (
@@ -207,6 +210,15 @@ async def run_review_stream(
                                 "count": len(findings),
                             },
                         }
+
+                elif name in ("fetch_pr", "build_rag"):
+                    yield {
+                        "event": "agent_done",
+                        "data": {
+                            "agent": name,
+                            "count": 0,
+                        },
+                    }
 
                 elif name == "synthesizer":
                     output_state = event.get("data", {}).get("output")

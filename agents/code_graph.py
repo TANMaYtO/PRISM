@@ -148,6 +148,16 @@ _SKIP_DIRS: frozenset[str] = frozenset(
         ".pytest_cache",
         "vendor",
         "target",
+        "tests",
+        "test",
+        "testing",
+        "docs",
+        "doc",
+        "examples",
+        "example",
+        "tutorials",
+        "site-packages",
+        ".github",
     }
 )
 

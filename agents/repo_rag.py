@@ -9,6 +9,7 @@ review context quality.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import tempfile
 import time
@@ -180,7 +181,7 @@ class HybridCodeRetriever:
         """
         # Step 1: Structural graph
         t0 = time.perf_counter()
-        self.code_graph.build(self.repo_path)
+        await asyncio.to_thread(self.code_graph.build, self.repo_path)
         t1 = time.perf_counter()
         logger.info("CodeGraph built in %.2fs", t1 - t0)
 
@@ -196,7 +197,8 @@ class HybridCodeRetriever:
 
         if cache_dir.exists() and (cache_dir / "index.faiss").exists():
             logger.info("Loading cached FAISS index from %s", cache_dir)
-            self._vectorstore = FAISS.load_local(
+            self._vectorstore = await asyncio.to_thread(
+                FAISS.load_local,
                 str(cache_dir),
                 embeddings,
                 allow_dangerous_deserialization=True,
@@ -244,8 +246,8 @@ class HybridCodeRetriever:
                 separators=["\nclass ", "\ndef ", "\n\n", "\n", " "],
             )
             chunks = splitter.split_documents(raw_docs)
-            if len(chunks) > 400:
-                chunks = chunks[:400]
+            if len(chunks) > 250:
+                chunks = chunks[:250]
                 logger.info(
                     "Capped semantic indexing to %d chunks for fast real-time review",
                     len(chunks),
@@ -273,13 +275,15 @@ class HybridCodeRetriever:
                 )
             else:
                 logger.info("Building FAISS index with %d chunks locally...", len(chunks))
-                self._vectorstore = FAISS.from_documents(
-                    chunks, embeddings
+                self._vectorstore = await asyncio.to_thread(
+                    FAISS.from_documents,
+                    chunks,
+                    embeddings,
                 )
 
             # Save the newly built index
             cache_dir.mkdir(parents=True, exist_ok=True)
-            self._vectorstore.save_local(str(cache_dir))
+            await asyncio.to_thread(self._vectorstore.save_local, str(cache_dir))
             logger.info("Saved FAISS index to %s", cache_dir)
 
         t3 = time.perf_counter()
