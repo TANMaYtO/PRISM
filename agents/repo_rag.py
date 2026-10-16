@@ -453,7 +453,7 @@ async def run_repo_rag(state: dict[str, Any]) -> dict[str, Any]:
     branch: str = pr_data.base_ref
 
     clone_dir = _clone_repo(owner, repo_name, branch)
-    target_files = [f.filename for f in pr_data.files]
+    target_files = [f.filename for f in pr_data.diff_files]
 
     hybrid = HybridCodeRetriever(
         repo_path=clone_dir,
