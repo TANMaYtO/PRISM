@@ -36,7 +36,9 @@ SUPABASE_KEY: str = _require_env("SUPABASE_KEY")
 # ── Model / RAG defaults (overridable via env) ──────────────────────
 # LangChain / Google GenAI configuration
 MODEL_NAME = os.getenv("MODEL_NAME", "gemini-3.1-flash-lite")
-EMBEDDING_MODEL_NAME = os.getenv("EMBEDDING_MODEL_NAME", "all-MiniLM-L6-v2")
+EMBEDDING_MODEL_NAME = os.getenv(
+    "EMBEDDING_MODEL_NAME", "models/gemini-embedding-001"
+)
 MAX_CONTEXT_TOKENS: int = int(os.getenv("MAX_CONTEXT_TOKENS", "8000"))
 CHUNK_SIZE: int = int(os.getenv("CHUNK_SIZE", "500"))
 CHUNK_OVERLAP: int = int(os.getenv("CHUNK_OVERLAP", "50"))

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import tempfile
 import time
 from pathlib import Path
@@ -20,6 +21,7 @@ from git import Repo
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
 from langchain_core.documents import Document
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_huggingface import HuggingFaceEmbeddings
 
 from agents.code_graph import CodeGraph
@@ -29,6 +31,7 @@ from config import (
     CHUNK_SIZE,
     EMBEDDING_MODEL_NAME,
     FAISS_CACHE_DIR,
+    GEMINI_API_KEY,
     GITHUB_TOKEN,
     MAX_CONTEXT_TOKENS,
     SUPPORTED_EXTENSIONS,
@@ -61,7 +64,23 @@ def _collect_source_files(repo_path: Path) -> list[Document]:
             continue
         # Skip common non-source dirs
         if any(
-            part in {"node_modules", "__pycache__", "venv", "dist", "build"}
+            part
+            in {
+                "node_modules",
+                "__pycache__",
+                "venv",
+                ".venv",
+                "dist",
+                "build",
+                "tests",
+                "test",
+                "docs",
+                "doc",
+                "examples",
+                "example",
+                "tutorials",
+                ".github",
+            }
             for part in relative.parts
         ):
             continue
@@ -143,7 +162,31 @@ def _estimate_tokens(text: str) -> int:
 def _get_cache_dir(owner: str, repo_name: str, branch: str) -> Path:
     """Return the absolute cache directory for a given repo + branch."""
     folder_name = _safe_repo_dir_name(owner, repo_name, branch)
-    return FAISS_CACHE_DIR / folder_name
+    model_tag = re.sub(r"[^a-zA-Z0-9_-]", "_", EMBEDDING_MODEL_NAME)
+    return FAISS_CACHE_DIR / f"{folder_name}_{model_tag}"
+
+
+def _get_embedding_model() -> Any:
+    """Return embedding model, preferring API embeddings for low memory usage.
+
+    Uses GoogleGenerativeAIEmbeddings when available to operate well within
+    Render's 512MB RAM free tier limit without downloading local PyTorch weights.
+    """
+    if (
+        EMBEDDING_MODEL_NAME.startswith("models/")
+        or "gemini" in EMBEDDING_MODEL_NAME.lower()
+    ):
+        logger.info(
+            "Initializing Google Gemini API embeddings: %s", EMBEDDING_MODEL_NAME
+        )
+        return GoogleGenerativeAIEmbeddings(
+            model=EMBEDDING_MODEL_NAME,
+            google_api_key=GEMINI_API_KEY,
+        )
+    logger.info("Initializing HuggingFace embeddings: %s", EMBEDDING_MODEL_NAME)
+    return HuggingFaceEmbeddings(
+        model_name=EMBEDDING_MODEL_NAME,
+    )
 
 
 class HybridCodeRetriever:
@@ -177,7 +220,7 @@ class HybridCodeRetriever:
         """Build both CodeGraph and FAISS index.
 
         Step 1: Build CodeGraph (sync, fast, no API calls)
-        Step 2: Load or build FAISS index using local HuggingFace embeddings
+        Step 2: Load or build FAISS index using API or local embeddings
         """
         # Step 1: Structural graph
         t0 = time.perf_counter()
@@ -188,37 +231,43 @@ class HybridCodeRetriever:
         # Step 2: Semantic FAISS index (cached locally)
         t2 = time.perf_counter()
 
-        logger.info("Loading local HuggingFace embeddings: %s", EMBEDDING_MODEL_NAME)
-        embeddings = HuggingFaceEmbeddings(
-            model_name=EMBEDDING_MODEL_NAME,
-        )
-
+        embeddings = _get_embedding_model()
         cache_dir = _get_cache_dir(self.owner, self.repo_name, self.branch)
 
+        loaded_from_cache = False
         if cache_dir.exists() and (cache_dir / "index.faiss").exists():
-            logger.info("Loading cached FAISS index from %s", cache_dir)
-            self._vectorstore = await asyncio.to_thread(
-                FAISS.load_local,
-                str(cache_dir),
-                embeddings,
-                allow_dangerous_deserialization=True,
-            )
-            self._chunk_sources = {
-                doc.metadata.get("source", "")
-                for doc in self._vectorstore.docstore._dict.values()
-            }
-            logger.info(
-                "Loaded %d cached vectors",
-                len(self._vectorstore.docstore._dict),
-            )
-        else:
+            try:
+                logger.info("Loading cached FAISS index from %s", cache_dir)
+                self._vectorstore = await asyncio.to_thread(
+                    FAISS.load_local,
+                    str(cache_dir),
+                    embeddings,
+                    allow_dangerous_deserialization=True,
+                )
+                self._chunk_sources = {
+                    doc.metadata.get("source", "")
+                    for doc in self._vectorstore.docstore._dict.values()
+                }
+                logger.info(
+                    "Loaded %d cached vectors",
+                    len(self._vectorstore.docstore._dict),
+                )
+                loaded_from_cache = True
+            except Exception as load_err:
+                logger.warning(
+                    "Failed to load cached FAISS index (%s). Rebuilding fresh index.",
+                    load_err,
+                )
+                self._vectorstore = None
+
+        if not loaded_from_cache:
             raw_docs = _collect_source_files(self.repo_path)
             logger.info(
                 "Collected %d source files from repo", len(raw_docs)
             )
 
             # Prioritize target changed files and their immediate module neighborhood
-            if self.target_files and len(raw_docs) > 80:
+            if self.target_files and len(raw_docs) > 50:
                 target_set = set(self.target_files)
                 target_dirs = {
                     Path(f).parent.as_posix() for f in self.target_files
@@ -234,7 +283,7 @@ class HybridCodeRetriever:
                     return 2
 
                 raw_docs.sort(key=_compute_file_priority)
-                raw_docs = raw_docs[:80]
+                raw_docs = raw_docs[:50]
                 logger.info(
                     "Focused semantic indexing on %d relevant source files",
                     len(raw_docs),
@@ -246,8 +295,8 @@ class HybridCodeRetriever:
                 separators=["\nclass ", "\ndef ", "\n\n", "\n", " "],
             )
             chunks = splitter.split_documents(raw_docs)
-            if len(chunks) > 250:
-                chunks = chunks[:250]
+            if len(chunks) > 80:
+                chunks = chunks[:80]
                 logger.info(
                     "Capped semantic indexing to %d chunks for fast real-time review",
                     len(chunks),
@@ -282,9 +331,12 @@ class HybridCodeRetriever:
                 )
 
             # Save the newly built index
-            cache_dir.mkdir(parents=True, exist_ok=True)
-            await asyncio.to_thread(self._vectorstore.save_local, str(cache_dir))
-            logger.info("Saved FAISS index to %s", cache_dir)
+            try:
+                cache_dir.mkdir(parents=True, exist_ok=True)
+                await asyncio.to_thread(self._vectorstore.save_local, str(cache_dir))
+                logger.info("Saved FAISS index to %s", cache_dir)
+            except Exception as save_err:
+                logger.warning("Could not persist FAISS index cache: %s", save_err)
 
         t3 = time.perf_counter()
         logger.info("FAISS index loaded/built in %.2fs", t3 - t2)
