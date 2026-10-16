@@ -1,11 +1,17 @@
 import { PRReviewResponse, BenchmarkSummary } from "./types";
+import benchmarkFallback from "@/data/benchmark.json";
 
 export async function getRecentReviews(): Promise<PRReviewResponse[]> {
-  const res = await fetch("/api/reviews");
-  if (!res.ok) {
-    throw new Error("Failed to fetch recent reviews");
+  try {
+    const res = await fetch("/api/reviews");
+    if (!res.ok) {
+      return [];
+    }
+    return await res.json();
+  } catch (err) {
+    console.warn("Could not fetch recent reviews from backend:", err);
+    return [];
   }
-  return res.json();
 }
 
 export async function getReview(id: string): Promise<PRReviewResponse> {
@@ -17,9 +23,13 @@ export async function getReview(id: string): Promise<PRReviewResponse> {
 }
 
 export async function getBenchmark(): Promise<BenchmarkSummary> {
-  const res = await fetch("/api/benchmark");
-  if (!res.ok) {
-    throw new Error("Failed to fetch benchmark");
+  try {
+    const res = await fetch("/api/benchmark");
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch (err) {
+    console.warn("Backend /api/benchmark unavailable, using bundled fallback:", err);
   }
-  return res.json();
+  return benchmarkFallback as unknown as BenchmarkSummary;
 }
