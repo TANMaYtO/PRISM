@@ -43,6 +43,7 @@ export function useReview(urlParam: string | null) {
   const [elapsedSeconds, setElapsedSeconds] = useState<number>(0);
 
   const findingsRef = useRef<AgentFinding[]>([]);
+  const isCompleteRef = useRef<boolean>(false);
 
   useEffect(() => {
     if (!isStreaming) return;
@@ -58,6 +59,7 @@ export function useReview(urlParam: string | null) {
     setIsStreaming(true);
     setFindings([]);
     findingsRef.current = [];
+    isCompleteRef.current = false;
     setError(null);
 
     // Assuming the input URL is like: https://github.com/owner/repo/pull/123
@@ -121,6 +123,7 @@ export function useReview(urlParam: string | null) {
 
       eventSource.addEventListener("complete", (e: MessageEvent) => {
         const data: PRReviewResponse = JSON.parse(e.data);
+        isCompleteRef.current = true;
         setFinalReview(data);
         setAgentStatus((prev) => ({ ...prev, synthesizer: "done" }));
         setStatus("Review complete.");
@@ -149,8 +152,8 @@ export function useReview(urlParam: string | null) {
       });
 
       eventSource.onerror = () => {
-        // Only set error if not already finished and no custom error received
-        if (!finalReview && !receivedCustomError) {
+        // Only set error if review did not complete and no custom error was received
+        if (!isCompleteRef.current && !receivedCustomError) {
           setError(
             "Lost connection to the server. Please check your network or verify the PR URL."
           );

@@ -22,7 +22,6 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
 from langchain_core.documents import Document
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
-from langchain_huggingface import HuggingFaceEmbeddings
 
 from agents.code_graph import CodeGraph
 from agents.pr_fetcher import FileDiff
@@ -53,7 +52,8 @@ def _collect_source_files(repo_path: Path) -> list[Document]:
             continue
         if file_path.suffix not in SUPPORTED_EXTENSIONS:
             continue
-        # Check path relative to repo root so we don't accidentally skip the clone dir itself
+        # Check path relative to repo root so we do not
+        # accidentally skip the clone dir itself
         try:
             relative = file_path.relative_to(repo_path)
         except ValueError:
@@ -184,6 +184,8 @@ def _get_embedding_model() -> Any:
             google_api_key=GEMINI_API_KEY,
         )
     logger.info("Initializing HuggingFace embeddings: %s", EMBEDDING_MODEL_NAME)
+    from langchain_huggingface import HuggingFaceEmbeddings
+
     return HuggingFaceEmbeddings(
         model_name=EMBEDDING_MODEL_NAME,
     )
@@ -215,6 +217,7 @@ class HybridCodeRetriever:
         self.code_graph: CodeGraph = CodeGraph()
         self._vectorstore: FAISS | None = None
         self._chunk_sources: set[str] = set()
+        self._context_cache: dict[str, str] = {}
 
     async def build(self) -> None:
         """Build both CodeGraph and FAISS index.
@@ -323,7 +326,9 @@ class HybridCodeRetriever:
                     embeddings,
                 )
             else:
-                logger.info("Building FAISS index with %d chunks locally...", len(chunks))
+                logger.info(
+                    "Building FAISS index with %d chunks locally...", len(chunks)
+                )
                 self._vectorstore = await asyncio.to_thread(
                     FAISS.from_documents,
                     chunks,
@@ -346,14 +351,23 @@ class HybridCodeRetriever:
 
         Returns a labelled string combining call-graph analysis and
         similarity search results, respecting MAX_CONTEXT_TOKENS.
-        Structural context gets priority if budget is tight.
+        Results are cached to prevent redundant work across parallel agents.
         """
+        cache_key = (
+            f"{changed_file.filename}::"
+            f"{changed_file.patch[:100] if changed_file.patch else ''}"
+        )
+        if cache_key in self._context_cache:
+            return self._context_cache[cache_key]
+
         structural_text = self._get_structural_context(changed_file)
         semantic_text = await self._get_semantic_context(
             changed_file, structural_text
         )
 
-        return self._merge_contexts(structural_text, semantic_text)
+        merged = self._merge_contexts(structural_text, semantic_text)
+        self._context_cache[cache_key] = merged
+        return merged
 
     def _get_structural_context(
         self, changed_file: FileDiff

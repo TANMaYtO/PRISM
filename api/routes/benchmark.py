@@ -88,7 +88,11 @@ async def get_benchmark() -> BenchmarkSummary:
             timeout=3.0,
         )
         if result.data and len(result.data) > 0:
-            return BenchmarkSummary(**result.data[0]["summary_data"])
+            raw_summary = result.data[0].get("summary_data")
+            if isinstance(raw_summary, str):
+                return BenchmarkSummary.model_validate_json(raw_summary)
+            if isinstance(raw_summary, dict):
+                return BenchmarkSummary.model_validate(raw_summary)
     except Exception as exc:
         logger.warning("Failed to load benchmark from Supabase: %s", exc)
 

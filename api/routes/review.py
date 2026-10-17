@@ -34,7 +34,8 @@ def _validate_repo_params(owner: str, name: str, pr_number: int) -> None:
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=(
                 f"Invalid repository owner: '{owner}'. "
-                "Only alphanumeric, hyphen, period, and underscore characters are allowed."
+                "Only alphanumeric, hyphen, period, and underscore "
+                "characters are allowed."
             ),
         )
     if not _REPO_SEGMENT_RE.match(name):
@@ -42,7 +43,8 @@ def _validate_repo_params(owner: str, name: str, pr_number: int) -> None:
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=(
                 f"Invalid repository name: '{name}'. "
-                "Only alphanumeric, hyphen, period, and underscore characters are allowed."
+                "Only alphanumeric, hyphen, period, and underscore "
+                "characters are allowed."
             ),
         )
     if pr_number <= 0:
@@ -80,24 +82,46 @@ async def create_review(
     )
 
     async def event_generator() -> AsyncGenerator[str, None]:
+        """Stream review events via SSE with background worker and keepalive."""
         final_review_data: Any = None
-        stream_iter = run_review_stream(
-            repo_owner=request.repo_owner,
-            repo_name=request.repo_name,
-            pr_number=request.pr_number,
-        ).__aiter__()
+        queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
+
+        async def _producer() -> None:
+            """Consume review stream events and push them onto the async queue."""
+            try:
+                async for event_payload in run_review_stream(
+                    repo_owner=request.repo_owner,
+                    repo_name=request.repo_name,
+                    pr_number=request.pr_number,
+                ):
+                    await queue.put(event_payload)
+            except asyncio.CancelledError:
+                logger.info(
+                    "Review producer cancelled for %s/%s#%d",
+                    request.repo_owner,
+                    request.repo_name,
+                    request.pr_number,
+                )
+                raise
+            except Exception as stream_err:
+                logger.exception("Error in review stream producer")
+                await queue.put({"event": "error", "data": str(stream_err)})
+            finally:
+                await queue.put(None)
+
+        producer_task = asyncio.create_task(_producer())
 
         try:
             while True:
                 try:
-                    payload = await asyncio.wait_for(
-                        stream_iter.__anext__(), timeout=5.0
-                    )
+                    payload = await asyncio.wait_for(queue.get(), timeout=15.0)
                 except asyncio.TimeoutError:
-                    # Send standard SSE keepalive comment to keep Vercel/Render proxy connection alive
+                    # Emit SSE comment to keep Render / Vercel proxy connection alive
                     yield ": keep-alive\n\n"
                     continue
-                except StopAsyncIteration:
+
+                if payload is None:
+                    # Producer completed
                     break
 
                 event_type = payload.get("event", "message")
@@ -136,7 +160,7 @@ async def create_review(
                             pr_number=request.pr_number,
                             review=review_obj,
                         ),
-                        timeout=4.0,
+                        timeout=5.0,
                     )
                     if review_id:
                         yield f"event: saved\ndata: {{\"id\": \"{review_id}\"}}\n\n"
@@ -147,6 +171,13 @@ async def create_review(
         except Exception as exc:
             logger.exception("Review stream generator failed")
             yield f"event: error\ndata: {json.dumps(str(exc))}\n\n"
+        finally:
+            if not producer_task.done():
+                producer_task.cancel()
+                try:
+                    await producer_task
+                except asyncio.CancelledError:
+                    pass
 
     return StreamingResponse(
         event_generator(),

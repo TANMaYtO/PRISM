@@ -79,9 +79,15 @@ async def invoke_llm_with_retry(
             raw = response.content
 
             if isinstance(raw, list):
-                if raw and isinstance(raw[0], dict) and "text" in raw[0]:
-                    return str(raw[0]["text"])
-                return str(raw)
+                text_parts: list[str] = []
+                for part in raw:
+                    if isinstance(part, dict):
+                        text_parts.append(str(part.get("text", "")))
+                    elif hasattr(part, "text"):
+                        text_parts.append(str(part.text))
+                    else:
+                        text_parts.append(str(part))
+                return "".join(text_parts).strip()
 
             return str(raw).strip()
         except Exception as exc:
